@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "inventory-lite",
+      "appId": "inventory-lite",
+      "name": "Inventory Lite",
+      "icon": "package",
+      "description": "Track products, stock movements, and low-stock follow-ups.",
+      "url": "https://raw.githubusercontent.com/workfoundry/ministore-templates/main/apps/inventory-lite.json",
+      "tags": ["inventory", "operations"]
+    },
+    {
+      "id": "field-service",
+      "appId": "field-service",
+      "name": "Field Service",
+      "icon": "layout-grid",
+      "description": "Manage service tickets, visits, notes, and customer updates.",
+      "url": "https://raw.githubusercontent.com/workfoundry/ministore-templates/main/apps/field-service.json",
+      "tags": ["service", "tickets"]
+    }
+  ]
+}

@@ -39,8 +39,8 @@ safe to run untrusted output in, and easy to port to web later.
 - **Everything a component needs is declared, not coded**: data source, field bindings, visibility
   conditions, actions on interaction. No inline scripting in v0.1 — add a constrained expression
   language later if needed (Zoho's own formula syntax is a reasonable model to copy from).
-- **Local-first.** v0.1 has no backend. Data lives in local device storage. The schema format should
-  not assume a server exists.
+- **Local-first.** Data lives in local device storage first. Optional cloud sync engines can mirror
+  changes when configured, but the schema and renderer must continue to work without a server.
 - **Sandboxed by construction.** Because there is no generated code execution, a malformed or malicious
   JSON definition can, at worst, describe a broken UI — it cannot access anything outside the
   whitelisted component/data API surface. Keep it this way; resist adding an "eval this JS snippet"
@@ -131,7 +131,49 @@ Top-level shape. This is the JSON "config" — the direct equivalent of the `.ds
   "appId": "string",
   "name": "string",
   "version": "1.0.0",
-  "theme": { "primaryColor": "#2193B0", "radius": "md", "fontScale": 1.0 },
+  "theme": {
+    "mode": "light | dark | system",
+    "light": {
+      "primaryColor": "#2193B0",
+      "backgroundColor": "#F8FAFC",
+      "surfaceColor": "#FFFFFF",
+      "textColor": "#0F172A",
+      "mutedTextColor": "#64748B",
+      "borderColor": "#DBE3EA",
+      "successColor": "#0F766E",
+      "dangerColor": "#DC2626"
+    },
+    "dark": {
+      "primaryColor": "#67E8F9",
+      "backgroundColor": "#0B1120",
+      "surfaceColor": "#111827",
+      "textColor": "#F8FAFC",
+      "mutedTextColor": "#94A3B8",
+      "borderColor": "#263244",
+      "successColor": "#34D399",
+      "dangerColor": "#F87171"
+    },
+    "radius": "md",
+    "fontScale": 1.0,
+    "fontFamily": "system | serif | mono | rounded"
+  },
+  "data": {
+    "storage": {
+      "adapter": "sqlite | memory",
+      "databaseName": "ministore_templates.db"
+    },
+    "cloudSync": {
+      "engine": "supabase",
+      "enabled": true,
+      "tableName": "ministore_records"
+    },
+    "operations": [
+      { "operationId": "tasks.list", "table": "Tasks", "type": "list" },
+      { "operationId": "tasks.create", "table": "Tasks", "type": "create" },
+      { "operationId": "tasks.update", "table": "Tasks", "type": "update" },
+      { "operationId": "tasks.delete", "table": "Tasks", "type": "delete" }
+    ]
+  },
   "tables": [ /* data model — see §4 */ ],
   "pages": [ /* UI — see below */ ],
   "navigation": {
@@ -140,6 +182,213 @@ Top-level shape. This is the JSON "config" — the direct equivalent of the `.ds
   }
 }
 ```
+
+### 3.0 Theme config and override model
+
+Every app definition can carry its own `theme` object. The renderer resolves that app-level theme into
+runtime values for colors, contrast text, softened accent surfaces, border radius, and font scaling.
+`mode` supports `light`, `dark`, and `system`; `system` resolves from the OS/browser color scheme while
+the downloaded template still carries both palettes.
+`fontFamily` supports `system`, `serif`, `mono`, and `rounded`; the resolved theme maps those semantic
+families onto platform-safe font stacks used by the launcher and renderer controls.
+
+Hosts can provide an external partial override by setting `globalThis.__MINISTORE_THEME_OVERRIDE__`
+before the app bundle runs:
+
+```ts
+globalThis.__MINISTORE_THEME_OVERRIDE__ = {
+  mode: 'dark',
+  light: { primaryColor: '#7c3aed' },
+  dark: { primaryColor: '#c4b5fd' },
+  radius: 'lg',
+  fontScale: 1.1,
+  fontFamily: 'serif',
+};
+```
+
+The override is validated with the same schema as the app theme and then shallow-merged over
+`AppDefinition.theme`. Invalid override values fail loudly instead of being silently ignored.
+
+Hosts can provide downloaded app templates before the bundle runs:
+
+```ts
+globalThis.__MINISTORE_APP_TEMPLATES__ = [downloadedAppDefinition];
+```
+
+MiniStore validates each downloaded template with `appDefinitionSchema`. Valid templates appear on the
+home screen next to bundled apps; invalid templates are ignored with a console warning.
+
+Users can also install reusable templates from public URLs in launcher settings. The URL can point
+directly to JSON, or to a GitHub `blob` URL for a JSON file; GitHub blob URLs are converted to raw
+content before download. The installer accepts either a raw `AppDefinition`:
+
+```json
+{
+  "appId": "vendor-management",
+  "name": "Vendor Management",
+  "version": "1.0.0",
+  "theme": {},
+  "data": {},
+  "tables": [],
+  "pages": [],
+  "navigation": {}
+}
+```
+
+or a bundle with seed data:
+
+```json
+{
+  "app": { "appId": "vendor-management", "name": "Vendor Management" },
+  "seedData": {
+    "Vendors": [
+      { "id": "vendor-1", "company_name": "Acme Facilities" }
+    ]
+  }
+}
+```
+
+Installed templates are persisted locally. Web stores them in `localStorage`; native stores them in
+the Expo SQLite database `workfoundry_installed_templates.db`. On launch, installed templates are
+loaded, validated again with `appDefinitionSchema`, and merged into the catalog by `appId` so a newer
+installed template replaces an older copy of the same app.
+
+Hosts can provide a curated installable-app catalog before the bundle runs:
+
+```ts
+globalThis.__MINISTORE_TEMPLATE_SOURCES__ = [
+  {
+    id: 'field-service',
+    appId: 'field-service',
+    name: 'Field Service',
+    description: 'Work orders, technician visits, and service notes.',
+    url: 'https://raw.githubusercontent.com/org/templates/main/field-service.json',
+    tags: ['operations', 'mobile'],
+  },
+];
+```
+
+For open-source distribution, the normal template discovery path is a public JSON catalog hosted from
+GitHub. Configure it with `EXPO_PUBLIC_MINISTORE_TEMPLATE_CATALOG_URL`, set
+`globalThis.__MINISTORE_TEMPLATE_CATALOG_URL__` before the bundle runs, or paste the URL in Settings.
+MiniStore stores the pasted catalog URL locally on the tenant device and fetches it again on launch.
+
+```json
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "field-service",
+      "appId": "field-service",
+      "name": "Field Service",
+      "description": "Work orders, technician visits, and service notes.",
+      "url": "https://raw.githubusercontent.com/org/templates/main/apps/field-service.json",
+      "tags": ["operations", "mobile"]
+    }
+  ]
+}
+```
+
+The launcher renders installed apps first and renders the curated or remote, not-yet-installed sources
+below them. Settings keeps the manual URL installer for non-curated templates.
+
+### 3.0.1 Cloud sync config
+
+Apps remain local-first. `data.storage.adapter` still controls the local store; host-level cloud
+configuration can mirror mutations from any app to a cloud engine. `data.cloudSync` is optional and
+lets an app disable sync or override engine-specific table settings. Supabase is the first supported
+cloud engine. The runtime enables it only after Supabase Auth returns a signed-in user/session.
+First-run onboarding is designed around private BYO Supabase: the tenant creates their own Supabase
+project, runs `supabase/schema.sql`, and enters only the public project URL plus anon/publishable key
+in MiniStore. The first onboarding step asks for the user's language and stores it locally; MiniStore
+shell text, setup steps, settings, and runtime chrome use that preference. The user then signs in
+with Supabase Auth, names their organization, and chooses installable app templates. Mini-app
+template labels remain template-owned so a template can ship its own localized strings.
+Project configuration can also be supplied before the app bundle runs:
+
+```ts
+globalThis.__MINISTORE_CLOUD_SYNC__ = {
+  engine: 'supabase',
+  supabaseUrl: 'https://project.supabase.co',
+  supabaseAnonKey: 'sb_publishable_...',
+  tableName: 'ministore_records',
+};
+```
+
+Expo hosts can also provide `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`,
+and `EXPO_PUBLIC_SUPABASE_TABLE_NAME` for support builds. The signed-in user's access token and
+user id are then passed to the sync engine so row-level security can enforce
+`auth.uid() = owner_id`. The Supabase table is intentionally generic so every mini app can sync
+through one table: `owner_id uuid`, `app_id text`, `table_name text`, `record_id text`, `payload
+jsonb`, `deleted_at timestamptz null`, `updated_at timestamptz`, `device_id text`, and
+`sync_version bigint`, with a unique constraint on `(owner_id, app_id, table_name, record_id)`.
+
+The runtime uses local-first two-way sync: local mutations are queued in a durable outbox, pushed to
+Supabase with retry/backoff, and remote changes are pulled by `updated_at` watermark. Remote deletes
+are represented as tombstones through `deleted_at`. See `docs/supabase-sync-setup.md` for SQL setup
+and RLS policies.
+
+### 3.0.2 Declarative logic hooks
+
+MiniStore templates can declare Zoho Creator-style logic without shipping executable code. The runtime
+executes a constrained rule model with whitelisted steps only; downloaded templates cannot run
+arbitrary JavaScript.
+
+Supported hook events:
+
+| Event | When it runs |
+|---|---|
+| `preLoad` | When a page or modal becomes active, before post-load feedback |
+| `postLoad` | Immediately after the active page/modal is mounted |
+| `fieldChange` | When a bound input/select/checkbox writes into the draft |
+| `validation` | Before `createRecord` or form-level `updateRecord` writes |
+| `preSubmission` | After validation passes and before the repository write |
+| `postSubmission` | After a successful repository write |
+| `buttonClick` | Before a button's configured action runs |
+
+Rules live either at `app.logic` or on a node as `node.logic`. A node-level rule is scoped to the
+node's `id` when present.
+
+```json
+{
+  "logic": [
+    {
+      "id": "default-priority",
+      "event": "preLoad",
+      "pageId": "add_task_modal",
+      "steps": [
+        { "type": "setField", "field": "priority", "value": "Medium" }
+      ]
+    },
+    {
+      "id": "amount-approval",
+      "event": "preSubmission",
+      "table": "Expenses",
+      "steps": [
+        {
+          "type": "stop",
+          "message": "Expenses over 5000 need approval.",
+          "when": { "field": "amount", "op": "gt", "value": 5000 }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Step types:
+
+| Step | Effect |
+|---|---|
+| `setField` | Updates the current form draft |
+| `showToast` | Displays a user-facing message |
+| `validate` | Blocks submission when the named field is empty, or when its condition is false |
+| `stop` | Blocks the current action/submission when its optional condition matches |
+| `runAction` | Queues an existing whitelisted renderer action |
+
+Conditions support `eq`, `neq`, `contains`, `empty`, `notEmpty`, `gt`, `gte`, `lt`, `lte`, and `in`.
+Values can be literals or references to `{ "source": "draft" }`, `{ "source": "record" }`,
+`{ "source": "event" }`, `{ "source": "literal" }`, or `{ "source": "now" }`.
 
 ### 3.1 Page definition
 ```json
@@ -157,16 +406,25 @@ Top-level shape. This is the JSON "config" — the direct equivalent of the `.ds
         "datasource": { "table": "Tasks", "sort": [{ "field": "due_date", "dir": "asc" }],
                         "filter": { "field": "completed", "op": "eq", "value": false } },
         "itemTemplate": {
-          "kind": "container", "type": "card",
+          "kind": "container", "type": "card", "direction": "horizontal",
           "children": [
             { "kind": "primitive", "type": "checkbox", "bind": "completed", "onChange": "toggleComplete" },
-            { "kind": "primitive", "type": "text", "bind": "title", "variant": "body" },
-            { "kind": "primitive", "type": "badge", "bind": "priority" }
+            { "kind": "container", "type": "stack", "direction": "vertical",
+              "children": [
+                { "kind": "primitive", "type": "text", "bind": "title", "variant": "body" },
+                { "kind": "container", "type": "stack", "direction": "horizontal",
+                  "children": [
+                    { "kind": "primitive", "type": "text", "bind": "due_date", "variant": "caption" },
+                    { "kind": "primitive", "type": "badge", "bind": "priority" },
+                    { "kind": "primitive", "type": "button", "label": "Edit task", "icon": "edit", "variant": "icon",
+                      "action": { "type": "openModal", "target": "edit_task_modal", "table": "Tasks" } }
+                  ] }
+              ] }
           ]
         }
       },
       {
-        "kind": "primitive", "type": "button", "label": "+ Add Task",
+        "kind": "primitive", "type": "button", "label": "Add task", "icon": "plus", "variant": "fab",
         "action": { "type": "openModal", "target": "add_task_modal" }
       }
     ]
@@ -181,6 +439,11 @@ Top-level shape. This is the JSON "config" — the direct equivalent of the `.ds
   `createRecord`, `updateRecord`, `deleteRecord`, `openModal`, `closeModal`, `navigate`,
   `toggleField`, `showToast`. Each action takes a fixed set of named parameters — no arbitrary
   expressions in v0.1 (see §11 on when/if to add a formula language).
+  - `openModal` can include `table` when launched from a list row. The runtime copies that active
+    row into the modal draft and stores the editing record id.
+  - `updateRecord` with `field` updates a single field on the active row. `updateRecord` without
+    `field` saves the full modal draft back to the editing record.
+  - `deleteRecord` deletes either the active row or the modal's editing record.
 - **`visibility`** (optional, on any component): `{ "field": "status", "op": "eq", "value": "Won" }`
   — directly mirrors Zoho's field-level `visibility` conditions.
 
@@ -288,10 +551,11 @@ AppDefinition (JSON)
 - **Context, not prop-drilling, for data.** A `DataSourceProvider` (React Context) exposes the active
   table's records/record to any descendant `<Node>` — mirrors how Zoho's ZML pages implicitly know
   which `report`/`form` they're bound to.
-- **Local store: SQLite via `expo-sqlite` (or `op-sqlite` if performance requires it later), wrapped
-  by a small repository layer** (`getRecords`, `createRecord`, `updateRecord`, `deleteRecord`,
-  `subscribeToTable`). This repository is the seam where a future Supabase sync adapter plugs in
-  without the renderer or schema changing — the renderer never talks to SQLite directly.
+- **Local store: SQLite via `expo-sqlite` on native and a synchronous localStorage-backed adapter on
+  web, wrapped by a small repository layer** (`getRecords`, `upsertRecord`, `createRecord`,
+  `updateRecord`, `deleteRecord`, `subscribeToTable`). This repository is where hosted Supabase sync
+  plugs in without the renderer or schema changing — the renderer never talks to SQLite or Supabase
+  directly.
 - **Validation at load time, not render time.** Parse the whole `AppDefinition` through a schema
   validator (Zod) once, on load — catch bad configs before any component tries to render, with a
   clear error screen naming the offending node.
@@ -398,22 +662,27 @@ and widget type.
                           "sort": [{ "field": "due_date", "dir": "asc" }] },
           "emptyState": { "kind": "primitive", "type": "text", "value": "No tasks yet — add one below." },
           "itemTemplate": {
-            "kind": "container", "type": "card",
+            "kind": "container", "type": "card", "direction": "horizontal",
             "children": [
               { "kind": "primitive", "type": "checkbox", "bind": "completed",
                 "action": { "type": "updateRecord", "table": "Tasks", "field": "completed", "value": true } },
               { "kind": "container", "type": "stack", "direction": "vertical",
                 "children": [
                   { "kind": "primitive", "type": "text", "bind": "title", "variant": "body" },
-                  { "kind": "primitive", "type": "text", "bind": "due_date", "variant": "caption" }
+                  { "kind": "container", "type": "stack", "direction": "horizontal",
+                    "children": [
+                      { "kind": "primitive", "type": "text", "bind": "due_date", "variant": "caption" },
+                      { "kind": "primitive", "type": "badge", "bind": "priority" },
+                      { "kind": "primitive", "type": "button", "label": "Edit task", "icon": "edit", "variant": "icon",
+                        "action": { "type": "openModal", "target": "edit_task_modal", "table": "Tasks" } }
+                    ] }
                 ]
-              },
-              { "kind": "primitive", "type": "badge", "bind": "priority" }
+              }
             ]
           }
         },
         {
-          "kind": "primitive", "type": "button", "label": "+ Add Task", "variant": "filled",
+          "kind": "primitive", "type": "button", "label": "Add task", "icon": "plus", "variant": "fab",
           "action": { "type": "openModal", "target": "add_task_modal" }
         }
       ]
@@ -433,6 +702,23 @@ and widget type.
           "action": { "type": "createRecord", "table": "Tasks", "onSuccess": { "type": "closeModal" } } },
         { "kind": "primitive", "type": "button", "label": "Cancel", "variant": "ghost",
           "action": { "type": "closeModal" } }
+      ]
+    }
+  },
+  {
+    "pageId": "edit_task_modal",
+    "title": "Task Details",
+    "layout": {
+      "kind": "complex", "type": "modal",
+      "children": [
+        { "kind": "primitive", "type": "input", "bind": "title", "label": "Title", "required": true },
+        { "kind": "primitive", "type": "input", "bind": "notes", "label": "Notes", "multiline": true },
+        { "kind": "primitive", "type": "datepicker", "bind": "due_date", "label": "Due Date" },
+        { "kind": "primitive", "type": "select", "bind": "priority", "label": "Priority" },
+        { "kind": "primitive", "type": "button", "label": "Save", "variant": "filled",
+          "action": { "type": "updateRecord", "table": "Tasks", "onSuccess": { "type": "closeModal" } } },
+        { "kind": "primitive", "type": "button", "label": "Delete task", "icon": "trash", "variant": "danger",
+          "action": { "type": "deleteRecord", "table": "Tasks", "onSuccess": { "type": "closeModal" } } }
       ]
     }
   }
