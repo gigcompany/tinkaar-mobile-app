@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bot, CheckCircle2, CheckSquare, ChevronLeft, DownloadCloud, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
+import { Bot, Building2, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Languages, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Rocket, Settings, ShieldCheck, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
 import { Button, Input, Paragraph, TamaguiProvider, Text, Theme, XStack, YStack } from 'tamagui';
 import tamaguiConfig from './tamagui.config';
 import {
@@ -1152,8 +1152,9 @@ function OnboardingScreen({
       : status.type === 'success' || status.type === 'signed-in'
         ? theme.successColor
         : theme.mutedTextColor;
+  const stepMeta = getOnboardingStepMeta(step);
 
-  const pageBackground = theme.mode === 'dark' ? '#06111f' : '#dbeafe';
+  const pageBackground = theme.mode === 'dark' ? '#06111f' : '#eef5ff';
   const cardBackground = theme.mode === 'dark' ? '#0f172a' : '#ffffff';
   const mutedPanelBackground = theme.mode === 'dark' ? '#111827' : '#f8fafc';
   const cardShadow = theme.mode === 'dark' ? '#000000' : '#2563eb';
@@ -1181,28 +1182,28 @@ function OnboardingScreen({
         >
           <YStack
             width="100%"
-            minHeight={isCompact ? 690 : 720}
-            maxWidth={390}
+            minHeight={isCompact ? 720 : 760}
+            maxWidth={410}
             alignSelf="center"
             justifyContent="space-between"
-            gap="$5"
+            gap="$4"
             padding={isCompact ? '$4' : '$5'}
-            borderRadius={30}
+            borderRadius={32}
             borderWidth={1}
             borderColor={theme.mode === 'dark' ? '#1e293b' : '#e0e7ff'}
             backgroundColor={cardBackground}
             shadowColor={cardShadow}
-            shadowOpacity={theme.mode === 'dark' ? 0.28 : 0.24}
-            shadowRadius={26}
-            shadowOffset={{ width: 0, height: 16 }}
+            shadowOpacity={theme.mode === 'dark' ? 0.3 : 0.18}
+            shadowRadius={32}
+            shadowOffset={{ width: 0, height: 18 }}
           >
-            <YStack gap="$5">
+            <YStack gap="$4">
               <XStack alignItems="center" justifyContent="space-between" gap="$3">
                 <XStack alignItems="center" gap="$2.5" flex={1} minWidth={0}>
                   <YStack
-                    width={36}
-                    height={36}
-                    borderRadius={10}
+                    width={40}
+                    height={40}
+                    borderRadius={14}
                     alignItems="center"
                     justifyContent="center"
                     backgroundColor={theme.primaryColor}
@@ -1213,9 +1214,14 @@ function OnboardingScreen({
                   >
                     <Sparkles color={theme.primaryContrastColor} size={18} strokeWidth={2.2} />
                   </YStack>
-                  <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={19} lineHeight={24} fontWeight="900" numberOfLines={1}>
-                    {PRODUCT_NAME}
-                  </Text>
+                  <YStack flex={1} minWidth={0}>
+                    <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={19} lineHeight={24} fontWeight="900" numberOfLines={1}>
+                      {PRODUCT_NAME}
+                    </Text>
+                    <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={15} fontWeight="700" numberOfLines={1}>
+                      Private app builder
+                    </Text>
+                  </YStack>
                 </XStack>
                 {canGoBack ? (
                   <Pressable
@@ -1249,14 +1255,15 @@ function OnboardingScreen({
                 stepIndex={safeStepIndex}
                 onSelectStep={goToStep}
               />
+              <OnboardingStepHero theme={theme} meta={stepMeta} />
             </YStack>
 
             <YStack
               flex={1}
-              justifyContent="center"
+              justifyContent="space-between"
               gap="$4"
             >
-              <YStack minHeight={isCompact ? 460 : 490} justifyContent="center" gap="$4">
+              <YStack minHeight={isCompact ? 430 : 456} justifyContent="center" gap="$4">
                 {step === 'language' ? (
                   <OnboardingLanguageStep
                     theme={theme}
@@ -1315,11 +1322,7 @@ function OnboardingScreen({
               {status.message ? <OnboardingStatusBanner theme={theme} status={status} statusColor={statusColor} backgroundColor={mutedPanelBackground} /> : null}
             </YStack>
 
-            <XStack justifyContent="center" paddingBottom="$1">
-              <Text color={theme.mutedTextColor} textAlign="center" fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17} fontWeight="700">
-                {t('onboarding.stepCounter', { current: safeStepIndex + 1, total: onboardingSteps.length })}
-              </Text>
-            </XStack>
+            <OnboardingTrustChips theme={theme} counter={t('onboarding.stepCounter', { current: safeStepIndex + 1, total: onboardingSteps.length })} />
           </YStack>
         </ScrollView>
       </SafeAreaView>
@@ -1384,6 +1387,101 @@ function OnboardingSlideProgress({
         })}
       </XStack>
     </YStack>
+  );
+}
+
+function OnboardingStepHero({
+  theme,
+  meta,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  meta: ReturnType<typeof getOnboardingStepMeta>;
+}) {
+  const Icon = meta.icon;
+
+  return (
+    <XStack
+      gap="$3"
+      alignItems="center"
+      padding="$3"
+      borderRadius={22}
+      borderWidth={1}
+      borderColor={theme.mode === 'dark' ? '#1e293b' : '#dbeafe'}
+      backgroundColor={theme.mode === 'dark' ? '#111827' : '#f8fbff'}
+    >
+      <YStack
+        width={48}
+        height={48}
+        borderRadius={18}
+        alignItems="center"
+        justifyContent="center"
+        backgroundColor={theme.primarySoftColor}
+        borderWidth={1}
+        borderColor={theme.mode === 'dark' ? '#22314a' : '#dbeafe'}
+        flexShrink={0}
+      >
+        <Icon color={theme.primaryColor} size={24} strokeWidth={2.2} />
+      </YStack>
+      <YStack flex={1} minWidth={0} gap="$1">
+        <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={14} fontWeight="900">
+          {meta.eyebrow}
+        </Text>
+        <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={15} lineHeight={20} fontWeight="900" numberOfLines={1}>
+          {meta.title}
+        </Text>
+        <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17} numberOfLines={2}>
+          {meta.copy}
+        </Text>
+      </YStack>
+    </XStack>
+  );
+}
+
+function OnboardingTrustChips({
+  theme,
+  counter,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  counter: string;
+}) {
+  return (
+    <XStack alignItems="center" justifyContent="space-between" gap="$2" paddingBottom="$1">
+      <XStack gap="$1.5" flex={1} minWidth={0}>
+        <MiniTrustChip theme={theme} label="Private" icon={ShieldCheck} />
+        <MiniTrustChip theme={theme} label="AI ready" icon={Wand2} />
+      </XStack>
+      <Text color={theme.mutedTextColor} textAlign="right" fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17} fontWeight="800">
+        {counter}
+      </Text>
+    </XStack>
+  );
+}
+
+function MiniTrustChip({
+  theme,
+  label,
+  icon: Icon,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  label: string;
+  icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+}) {
+  return (
+    <XStack
+      minHeight={30}
+      alignItems="center"
+      gap="$1.5"
+      paddingHorizontal="$2.5"
+      borderRadius={999}
+      backgroundColor={theme.mode === 'dark' ? '#172033' : '#f1f5f9'}
+      borderWidth={1}
+      borderColor={theme.mode === 'dark' ? '#253044' : '#e2e8f0'}
+    >
+      <Icon color={theme.primaryColor} size={13} strokeWidth={2.3} />
+      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={14} fontWeight="800">
+        {label}
+      </Text>
+    </XStack>
   );
 }
 
@@ -1571,6 +1669,51 @@ function OnboardingAppsStep({
   );
 }
 
+function getOnboardingStepMeta(step: OnboardingStepId): {
+  eyebrow: string;
+  title: string;
+  copy: string;
+  icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+} {
+  switch (step) {
+    case 'language':
+      return {
+        eyebrow: 'START HERE',
+        title: 'Make setup feel familiar',
+        copy: 'Choose the language that makes every next step easier to trust.',
+        icon: Languages,
+      };
+    case 'connect':
+      return {
+        eyebrow: 'YOUR CLOUD',
+        title: 'Bring your own Supabase',
+        copy: 'Records and generated app versions stay in the tenant account.',
+        icon: Cloud,
+      };
+    case 'account':
+      return {
+        eyebrow: 'SECURE ACCESS',
+        title: 'Sign in to sync safely',
+        copy: 'Supabase Auth keeps each workspace tied to its owner.',
+        icon: ShieldCheck,
+      };
+    case 'organization':
+      return {
+        eyebrow: 'WORKSPACE',
+        title: 'Name the shared home',
+        copy: 'A simple identity for the apps, records, and tweaks your team owns.',
+        icon: Building2,
+      };
+    case 'apps':
+      return {
+        eyebrow: 'READY',
+        title: 'Launch with a clean starter',
+        copy: 'Begin with the bundled app, then install and customize more.',
+        icon: Rocket,
+      };
+  }
+}
+
 function OnboardingHeader({
   eyebrow,
   title,
@@ -1624,7 +1767,7 @@ function LabeledInput({
         {label}
       </Text>
       <Input
-        minHeight={52}
+        minHeight={56}
         height="auto"
         value={value}
         autoCapitalize="none"
@@ -1633,15 +1776,15 @@ function LabeledInput({
         secureTextEntry={secureTextEntry}
         placeholder={placeholder}
         placeholderTextColor={theme.mutedTextColor as never}
-        backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
+        backgroundColor={theme.mode === 'dark' ? '#172033' : '#fbfdff'}
         borderWidth={1}
         borderColor={theme.borderColor}
-        borderRadius={16}
+        borderRadius={18}
         color={theme.textColor}
         fontFamily={theme.fontFamilyValue}
         fontSize={14}
         lineHeight={20}
-        paddingVertical="$3"
+        paddingVertical="$3.5"
         onChangeText={onChangeText}
       />
     </YStack>
@@ -1662,15 +1805,19 @@ function PrimaryAction({
   return (
     <Button
       size="$4"
-      minHeight={52}
+      minHeight={56}
       height="auto"
-      paddingVertical="$3"
+      paddingVertical="$3.5"
       disabled={disabled}
       backgroundColor={theme.primaryColor}
-      borderRadius={16}
+      borderRadius={18}
       color={theme.primaryContrastColor}
       fontFamily={theme.fontFamilyValue}
       fontWeight="900"
+      shadowColor={theme.primaryColor}
+      shadowOpacity={disabled ? 0 : 0.2}
+      shadowRadius={16}
+      shadowOffset={{ width: 0, height: 8 }}
       onPress={onPress}
     >
       {label}
@@ -2062,6 +2209,7 @@ function HomeScreen({
   const tileWidth = isCompact ? Math.floor((contentWidth - launcherGap * (compactColumns - 1)) / compactColumns) : 116;
   const iconSize = isCompact ? 76 : 84;
   const launchingTemplate = catalog.find((template) => template.app.appId === launchingAppId) ?? null;
+  const aiReady = Boolean(aiProviderConfig.apiKey.trim() && aiProviderConfig.model.trim());
 
   return (
     <YStack flex={1} backgroundColor={theme.backgroundColor}>
@@ -2074,19 +2222,40 @@ function HomeScreen({
             paddingBottom: 42,
           }}
         >
-          <YStack width="100%" maxWidth={900} alignSelf="center" gap="$7">
+          <YStack width="100%" maxWidth={900} alignSelf="center" gap="$6">
             <XStack alignItems="center" justifyContent="space-between" gap="$3">
-              <Text
-                flexShrink={1}
-                numberOfLines={1}
-                fontSize={isCompact ? 32 : 40}
-                lineHeight={isCompact ? 38 : 46}
-                fontWeight="800"
-                fontFamily={theme.fontFamilyValue}
-                color={theme.textColor}
-              >
-                {PRODUCT_NAME}
-              </Text>
+              <XStack alignItems="center" gap="$3" flex={1} minWidth={0}>
+                <YStack
+                  width={48}
+                  height={48}
+                  borderRadius={17}
+                  alignItems="center"
+                  justifyContent="center"
+                  backgroundColor={theme.primaryColor}
+                  shadowColor={theme.primaryColor}
+                  shadowOpacity={theme.mode === 'dark' ? 0.34 : 0.2}
+                  shadowRadius={18}
+                  shadowOffset={{ width: 0, height: 10 }}
+                >
+                  <Sparkles color={theme.primaryContrastColor} size={23} strokeWidth={2.1} />
+                </YStack>
+                <YStack flex={1} minWidth={0}>
+                  <Text
+                    flexShrink={1}
+                    numberOfLines={1}
+                    fontSize={isCompact ? 29 : 36}
+                    lineHeight={isCompact ? 35 : 42}
+                    fontWeight="900"
+                    fontFamily={theme.fontFamilyValue}
+                    color={theme.textColor}
+                  >
+                    {PRODUCT_NAME}
+                  </Text>
+                  <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={18} fontWeight="700" numberOfLines={1}>
+                    Apps you can install, run, and reshape.
+                  </Text>
+                </YStack>
+              </XStack>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('home.openSettings')}
@@ -2111,10 +2280,16 @@ function HomeScreen({
               </Pressable>
             </XStack>
 
-            <YStack gap="$3">
-              <Text fontSize={15} fontWeight="700" fontFamily={theme.fontFamilyValue} color={theme.mutedTextColor}>
-                {t('home.installedApps')}
-              </Text>
+            <HomeHeroCard
+              theme={theme}
+              installedCount={catalog.length}
+              installableCount={installableTemplateSources.length}
+              cloudConnected={Boolean(supabaseSession)}
+              aiReady={aiReady}
+            />
+
+            <YStack gap="$4">
+              <SectionHeading theme={theme} title={t('home.installedApps')} detail={`${catalog.length} ready`} />
               <XStack gap={launcherGap} rowGap={28} flexWrap="wrap" alignItems="flex-start">
                 {catalog.map((template) => (
                   <LauncherAppTile
@@ -2129,10 +2304,8 @@ function HomeScreen({
               </XStack>
             </YStack>
 
-            <YStack gap="$3">
-              <Text fontSize={15} fontWeight="700" fontFamily={theme.fontFamilyValue} color={theme.mutedTextColor}>
-                {t('home.appsToInstall')}
-              </Text>
+            <YStack gap="$4">
+              <SectionHeading theme={theme} title={t('home.appsToInstall')} detail={installableTemplateSources.length > 0 ? `${installableTemplateSources.length} available` : 'Catalog clear'} />
               {installableTemplateSources.length > 0 ? (
                 <XStack gap="$3" rowGap="$3" flexWrap="wrap" alignItems="stretch">
                   {installableTemplateSources.map((source) => (
@@ -2151,12 +2324,26 @@ function HomeScreen({
                   padding="$4"
                   borderWidth={1}
                   borderColor={theme.borderColor}
-                  borderRadius={16}
+                  borderRadius={22}
                   backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
+                  shadowColor={theme.mode === 'dark' ? '#000000' : '#64748b'}
+                  shadowOpacity={theme.mode === 'dark' ? 0.22 : 0.08}
+                  shadowRadius={18}
+                  shadowOffset={{ width: 0, height: 10 }}
                 >
-                  <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={20}>
-                    {t('home.noCuratedApps')}
-                  </Paragraph>
+                  <XStack gap="$3" alignItems="center">
+                    <YStack width={48} height={48} borderRadius={16} alignItems="center" justifyContent="center" backgroundColor={theme.primarySoftColor}>
+                      <DownloadCloud color={theme.primaryColor} size={23} strokeWidth={2.2} />
+                    </YStack>
+                    <YStack flex={1} minWidth={0} gap="$1">
+                      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={15} lineHeight={20} fontWeight="900">
+                        Templates are up to date
+                      </Text>
+                      <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
+                        {t('home.noCuratedApps')}
+                      </Paragraph>
+                    </YStack>
+                  </XStack>
                 </YStack>
               )}
             </YStack>
@@ -2204,6 +2391,140 @@ function HomeScreen({
         <LaunchOverlay template={launchingTemplate} theme={theme} progress={launchProgress} />
       ) : null}
     </YStack>
+  );
+}
+
+function HomeHeroCard({
+  theme,
+  installedCount,
+  installableCount,
+  cloudConnected,
+  aiReady,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  installedCount: number;
+  installableCount: number;
+  cloudConnected: boolean;
+  aiReady: boolean;
+}) {
+  return (
+    <YStack
+      width="100%"
+      gap="$4"
+      padding="$5"
+      borderRadius={28}
+      borderWidth={1}
+      borderColor={theme.mode === 'dark' ? '#1e293b' : '#dbeafe'}
+      backgroundColor={theme.mode === 'dark' ? '#101827' : '#f8fbff'}
+      shadowColor={theme.mode === 'dark' ? '#000000' : '#2563eb'}
+      shadowOpacity={theme.mode === 'dark' ? 0.26 : 0.1}
+      shadowRadius={24}
+      shadowOffset={{ width: 0, height: 14 }}
+    >
+      <XStack alignItems="flex-start" justifyContent="space-between" gap="$4">
+        <YStack flex={1} minWidth={0} gap="$2">
+          <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="900">
+            TODAY'S WORKSPACE
+          </Text>
+          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={24} lineHeight={30} fontWeight="900">
+            Launch apps, then tune them with AI.
+          </Text>
+          <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={21}>
+            Your installed tools sit up front. New templates and AI provider setup stay close, but out of the way.
+          </Paragraph>
+        </YStack>
+        <YStack width={64} height={64} borderRadius={22} alignItems="center" justifyContent="center" backgroundColor={theme.primaryColor} flexShrink={0}>
+          <Wand2 color={theme.primaryContrastColor} size={30} strokeWidth={2.2} />
+        </YStack>
+      </XStack>
+      <XStack gap="$2" rowGap="$2" flexWrap="wrap">
+        <HomeMetricChip theme={theme} value={installedCount} label="Installed" icon={LayoutGrid} />
+        <HomeMetricChip theme={theme} value={installableCount} label="To install" icon={DownloadCloud} />
+        <HomeStateChip theme={theme} active={cloudConnected} activeLabel="Cloud sync on" inactiveLabel="Cloud setup" icon={Cloud} />
+        <HomeStateChip theme={theme} active={aiReady} activeLabel="AI ready" inactiveLabel="Add AI key" icon={Bot} />
+      </XStack>
+    </YStack>
+  );
+}
+
+function HomeMetricChip({
+  theme,
+  value,
+  label,
+  icon: Icon,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  value: number;
+  label: string;
+  icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+}) {
+  return (
+    <XStack minHeight={40} alignItems="center" gap="$2" paddingHorizontal="$3" borderRadius={999} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}>
+      <Icon color={theme.primaryColor} size={16} strokeWidth={2.2} />
+      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={17} fontWeight="900">
+        {value}
+      </Text>
+      <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="700">
+        {label}
+      </Text>
+    </XStack>
+  );
+}
+
+function HomeStateChip({
+  theme,
+  active,
+  activeLabel,
+  inactiveLabel,
+  icon: Icon,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  active: boolean;
+  activeLabel: string;
+  inactiveLabel: string;
+  icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
+}) {
+  const color = active ? theme.successColor : theme.mutedTextColor;
+
+  return (
+    <XStack
+      minHeight={40}
+      alignItems="center"
+      gap="$2"
+      paddingHorizontal="$3"
+      borderRadius={999}
+      backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
+      borderWidth={1}
+      borderColor={active ? theme.primarySoftColor : theme.borderColor}
+    >
+      <Icon color={color} size={16} strokeWidth={2.2} />
+      <Text color={color} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="800">
+        {active ? activeLabel : inactiveLabel}
+      </Text>
+    </XStack>
+  );
+}
+
+function SectionHeading({
+  theme,
+  title,
+  detail,
+}: {
+  theme: ReturnType<typeof resolveAppTheme>;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <XStack alignItems="center" justifyContent="space-between" gap="$3">
+      <Text fontSize={16} lineHeight={22} fontWeight="900" fontFamily={theme.fontFamilyValue} color={theme.textColor}>
+        {title}
+      </Text>
+      <YStack paddingHorizontal="$2.5" paddingVertical="$1" borderRadius={999} backgroundColor={theme.mode === 'dark' ? '#172033' : '#f1f5f9'}>
+        <Text fontSize={11} lineHeight={14} fontWeight="800" fontFamily={theme.fontFamilyValue} color={theme.mutedTextColor}>
+          {detail}
+        </Text>
+      </YStack>
+    </XStack>
   );
 }
 
@@ -3044,21 +3365,25 @@ function InstallableTemplateTile({
   return (
     <YStack
       width={260}
-      minHeight={150}
+      minHeight={168}
       flexGrow={1}
       maxWidth={360}
       padding="$4"
       gap="$3"
       borderWidth={1}
       borderColor={theme.borderColor}
-      borderRadius={18}
+      borderRadius={24}
       backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
+      shadowColor={theme.mode === 'dark' ? '#000000' : '#64748b'}
+      shadowOpacity={theme.mode === 'dark' ? 0.22 : 0.08}
+      shadowRadius={18}
+      shadowOffset={{ width: 0, height: 10 }}
     >
       <XStack alignItems="flex-start" gap="$3">
         <YStack
-          width={48}
-          height={48}
-          borderRadius={15}
+          width={52}
+          height={52}
+          borderRadius={18}
           alignItems="center"
           justifyContent="center"
           backgroundColor={icon.backgroundColor}
@@ -3090,14 +3415,15 @@ function InstallableTemplateTile({
       ) : null}
       <Button
         size="$3"
-        minHeight={44}
+        minHeight={46}
         height="auto"
         paddingVertical="$2.5"
-        alignSelf="flex-start"
+        width="100%"
         backgroundColor={theme.primaryColor}
         borderRadius={999}
         color={theme.primaryContrastColor}
         fontFamily={theme.fontFamilyValue}
+        fontWeight="900"
         onPress={onInstall}
       >
         {t('common.install')}
@@ -3166,10 +3492,10 @@ function LauncherAppTile({
       onPress={() => onLaunch(template.app.appId)}
       style={({ pressed }) => ({
         opacity: pressed ? 0.72 : 1,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
+        transform: [{ scale: pressed ? 0.96 : 1 }],
       })}
     >
-      <YStack width={width} minHeight={112} gap="$2" alignItems="center">
+      <YStack width={width} minHeight={128} gap="$2" alignItems="center">
         <YStack
           width={iconSize}
           height={iconSize}
@@ -3196,6 +3522,23 @@ function LauncherAppTile({
             opacity={0.56}
           />
           <Icon color={icon.color} size={Math.round(iconSize * 0.47)} strokeWidth={1.9} />
+          {template.source === 'installed' ? (
+            <YStack
+              position="absolute"
+              right={-3}
+              bottom={-3}
+              width={24}
+              height={24}
+              borderRadius={12}
+              alignItems="center"
+              justifyContent="center"
+              backgroundColor={theme.primaryColor}
+              borderWidth={2}
+              borderColor={theme.backgroundColor}
+            >
+              <Wand2 color={theme.primaryContrastColor} size={12} strokeWidth={2.5} />
+            </YStack>
+          ) : null}
         </YStack>
         <Text
           width="100%"
@@ -3203,11 +3546,14 @@ function LauncherAppTile({
           numberOfLines={1}
           fontSize={14}
           lineHeight={18}
-          fontWeight="700"
+          fontWeight="800"
           fontFamily={theme.fontFamilyValue}
           color={theme.textColor}
         >
           {template.app.name}
+        </Text>
+        <Text width="100%" textAlign="center" numberOfLines={1} fontSize={11} lineHeight={14} fontWeight="700" fontFamily={theme.fontFamilyValue} color={theme.mutedTextColor}>
+          {template.source === 'installed' ? 'Custom' : 'Built in'}
         </Text>
       </YStack>
     </Pressable>

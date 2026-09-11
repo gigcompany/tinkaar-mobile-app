@@ -53,7 +53,13 @@ export function withCloudSyncRepository({
     return repository;
   }
 
-  const coordinator = new SupabaseSyncCoordinator(repository, app, config);
+  let coordinator: SupabaseSyncCoordinator;
+  try {
+    coordinator = new SupabaseSyncCoordinator(repository, app, config);
+  } catch (error) {
+    console.warn('Disabling cloud sync after local sync store initialization failed.', error);
+    return repository;
+  }
 
   return {
     adapterName: repository.adapterName,
