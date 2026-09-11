@@ -446,6 +446,7 @@ function InputPrimitive({ node, value }: ComponentRenderProps) {
         multiline={node.multiline}
         minHeight={node.multiline ? 116 : 50}
         height="auto"
+        textAlignVertical={node.multiline ? 'top' : 'center'}
         backgroundColor={getInsetSurfaceColor(runtime.theme.mode)}
         borderWidth={1}
         borderColor={runtime.theme.mode === 'dark' ? '#1f2937' : '#e2e8f0'}

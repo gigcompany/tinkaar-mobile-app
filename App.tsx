@@ -1562,6 +1562,7 @@ function HomeScreen({
   onLaunch: (appId: string) => void;
 }) {
   const { width } = useWindowDimensions();
+  const [launcherDeleteAppId, setLauncherDeleteAppId] = useState<string | null>(null);
   const horizontalPadding = width < 430 ? 22 : 32;
   const contentWidth = Math.min(width - horizontalPadding * 2, 900);
   const isCompact = width < 520;
@@ -1660,9 +1661,17 @@ function HomeScreen({
                       theme={theme}
                       width={tileWidth}
                       iconSize={iconSize}
+                      deleteVisible={launcherDeleteAppId === template.app.appId || uninstallingAppId === template.app.appId}
                       uninstalling={uninstallingAppId === template.app.appId}
-                      onLaunch={onLaunch}
-                      onUninstall={onUninstall}
+                      onLaunch={(appId) => {
+                        setLauncherDeleteAppId(null);
+                        onLaunch(appId);
+                      }}
+                      onRevealDelete={() => setLauncherDeleteAppId(template.app.appId)}
+                      onUninstall={(nextTemplate) => {
+                        setLauncherDeleteAppId(null);
+                        onUninstall(nextTemplate);
+                      }}
                     />
                   ))}
                 </XStack>
@@ -2749,6 +2758,7 @@ function InstallableTemplateTile({
 }) {
   const icon = getInstallableTemplateIcon(source, theme.mode);
   const Icon = icon.component;
+  const visibleTags = getVisibleTemplateTags(source.tags);
 
   return (
     <YStack
@@ -2790,9 +2800,9 @@ function InstallableTemplateTile({
           ) : null}
         </YStack>
       </XStack>
-      {source.tags && source.tags.length > 0 ? (
+      {visibleTags.length > 0 ? (
         <XStack gap="$1.5" rowGap="$1.5" flexWrap="wrap">
-          {source.tags.slice(0, 3).map((tag) => (
+          {visibleTags.slice(0, 3).map((tag) => (
             <YStack key={tag} paddingHorizontal="$2.5" paddingVertical="$1" borderRadius={999} backgroundColor={theme.primarySoftColor}>
               <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={11} fontWeight="800">
                 {tag}
@@ -2862,26 +2872,42 @@ function LauncherAppTile({
   theme,
   width,
   iconSize,
+  deleteVisible,
   uninstalling,
   onLaunch,
+  onRevealDelete,
   onUninstall,
 }: {
   template: TemplateBundle;
   theme: ReturnType<typeof resolveAppTheme>;
   width: number;
   iconSize: number;
+  deleteVisible: boolean;
   uninstalling: boolean;
   onLaunch: (appId: string) => void;
+  onRevealDelete: () => void;
   onUninstall: (template: TemplateBundle) => void;
 }) {
   const icon = getLauncherIcon(template, theme.mode);
   const Icon = icon.component;
+  const longPressTriggered = useRef(false);
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Launch ${template.app.name}`}
-      onPress={() => onLaunch(template.app.appId)}
+      onPress={() => {
+        if (longPressTriggered.current) {
+          longPressTriggered.current = false;
+          return;
+        }
+        onLaunch(template.app.appId);
+      }}
+      onLongPress={() => {
+        longPressTriggered.current = true;
+        onRevealDelete();
+      }}
+      delayLongPress={360}
       style={({ pressed }) => ({
         opacity: pressed ? 0.72 : 1,
         transform: [{ scale: pressed ? 0.96 : 1 }],
@@ -2931,35 +2957,37 @@ function LauncherAppTile({
               <Wand2 color={theme.primaryContrastColor} size={12} strokeWidth={2.5} />
             </YStack>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Uninstall ${template.app.name}`}
-            disabled={uninstalling}
-            onPress={(event) => {
-              event.stopPropagation();
-              onUninstall(template);
-            }}
-            style={({ pressed }) => ({
-              position: 'absolute',
-              top: -8,
-              right: -8,
-              opacity: uninstalling ? 0.5 : pressed ? 0.76 : 1,
-              transform: [{ scale: pressed ? 0.94 : 1 }],
-            })}
-          >
-            <YStack
-              width={32}
-              height={32}
-              borderRadius={16}
-              alignItems="center"
-              justifyContent="center"
-              backgroundColor={theme.mode === 'dark' ? '#451a1a' : '#fff1f2'}
-              borderWidth={2}
-              borderColor={theme.backgroundColor}
+          {deleteVisible ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Uninstall ${template.app.name}`}
+              disabled={uninstalling}
+              onPress={(event) => {
+                event.stopPropagation();
+                onUninstall(template);
+              }}
+              style={({ pressed }) => ({
+                position: 'absolute',
+                top: -8,
+                right: -8,
+                opacity: uninstalling ? 0.5 : pressed ? 0.76 : 1,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              })}
             >
-              <Trash2 color={theme.dangerColor} size={15} strokeWidth={2.3} />
-            </YStack>
-          </Pressable>
+              <YStack
+                width={32}
+                height={32}
+                borderRadius={16}
+                alignItems="center"
+                justifyContent="center"
+                backgroundColor={theme.mode === 'dark' ? '#451a1a' : '#fff1f2'}
+                borderWidth={2}
+                borderColor={theme.backgroundColor}
+              >
+                <Trash2 color={theme.dangerColor} size={15} strokeWidth={2.3} />
+              </YStack>
+            </Pressable>
+          ) : null}
         </YStack>
         <Text
           width="100%"
@@ -3069,6 +3097,10 @@ function getInstallableTemplateIcon(source: InstallableTemplateSource, mode: 'li
   return mode === 'dark'
     ? { component: LayoutGrid, backgroundColor: '#312e81', borderColor: '#4338ca', highlightColor: '#4f46e5', color: '#c7d2fe' }
     : { component: LayoutGrid, backgroundColor: '#eef2ff', borderColor: '#c7d2fe', highlightColor: '#ffffff', color: '#4f46e5' };
+}
+
+function getVisibleTemplateTags(tags: string[] | undefined) {
+  return (tags ?? []).filter((tag) => tag.trim().toLowerCase() !== 'ministore');
 }
 
 function inferIconKey(values: Array<string | undefined>) {
