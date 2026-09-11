@@ -4,7 +4,7 @@ let storedState: StoredSupabaseAuthState = {
   project: null,
   session: null,
   organization: null,
-  onboardingCompletedAt: null,
+  welcomeSeenAt: null,
 };
 
 export async function loadSupabaseAuthState(): Promise<StoredSupabaseAuthState> {

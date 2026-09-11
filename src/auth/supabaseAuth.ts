@@ -26,7 +26,7 @@ export type StoredSupabaseAuthState = {
   project: SupabaseProjectConfig | null;
   session: SupabaseAuthSession | null;
   organization: SupabaseOrganization | null;
-  onboardingCompletedAt: string | null;
+  welcomeSeenAt: string | null;
 };
 
 type SupabaseAuthResponse = {

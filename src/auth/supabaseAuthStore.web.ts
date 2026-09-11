@@ -13,12 +13,17 @@ export async function loadSupabaseAuthState(): Promise<StoredSupabaseAuthState> 
   }
 
   try {
-    const parsed = JSON.parse(stored) as StoredSupabaseAuthState;
+    const parsed = JSON.parse(stored) as StoredSupabaseAuthState & { onboardingCompletedAt?: string | null };
     return {
       project: isProjectConfig(parsed.project) ? parsed.project : null,
       session: isAuthSession(parsed.session) ? parsed.session : null,
       organization: isOrganization(parsed.organization) ? parsed.organization : null,
-      onboardingCompletedAt: typeof parsed.onboardingCompletedAt === 'string' ? parsed.onboardingCompletedAt : null,
+      welcomeSeenAt:
+        typeof parsed.welcomeSeenAt === 'string'
+          ? parsed.welcomeSeenAt
+          : typeof parsed.onboardingCompletedAt === 'string'
+            ? parsed.onboardingCompletedAt
+            : null,
     };
   } catch (error) {
     console.warn('Ignoring invalid Supabase auth storage.', error);
@@ -67,6 +72,6 @@ function createEmptyAuthState(): StoredSupabaseAuthState {
     project: null,
     session: null,
     organization: null,
-    onboardingCompletedAt: null,
+    welcomeSeenAt: null,
   };
 }

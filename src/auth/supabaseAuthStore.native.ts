@@ -16,12 +16,12 @@ export async function loadSupabaseAuthState(): Promise<StoredSupabaseAuthState> 
   }
 
   try {
-    const parsed = JSON.parse(row.payload) as Partial<StoredSupabaseAuthState>;
+    const parsed = JSON.parse(row.payload) as Partial<StoredSupabaseAuthState> & { onboardingCompletedAt?: string | null };
     return {
       project: parsed.project ?? null,
       session: parsed.session ?? null,
       organization: parsed.organization ?? null,
-      onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
+      welcomeSeenAt: parsed.welcomeSeenAt ?? parsed.onboardingCompletedAt ?? null,
     };
   } catch (error) {
     console.warn('Ignoring invalid Supabase auth storage.', error);
@@ -42,6 +42,6 @@ function createEmptyAuthState(): StoredSupabaseAuthState {
     project: null,
     session: null,
     organization: null,
-    onboardingCompletedAt: null,
+    welcomeSeenAt: null,
   };
 }

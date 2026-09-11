@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bot, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Languages, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Rocket, Settings, ShieldCheck, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
+import { Bot, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
 import { Button, Input, Paragraph, TamaguiProvider, Text, Theme, XStack, YStack } from 'tamagui';
 import tamaguiConfig from './tamagui.config';
 import {
@@ -121,19 +121,7 @@ type AiBuildStatus =
   | { type: 'success'; message: string }
   | { type: 'error'; message: string };
 
-type OnboardingStepId = 'language' | 'apps';
-
-type OnboardingStatus =
-  | { type: 'idle'; message: string }
-  | { type: 'loading'; message: string }
-  | { type: 'success'; message: string }
-  | { type: 'error'; message: string };
-
 const defaultSupabaseTableName = 'ministore_records';
-const onboardingSteps: Array<{ id: OnboardingStepId; labelKey: TranslationKey }> = [
-  { id: 'language', labelKey: 'onboarding.stepLanguage' },
-  { id: 'apps', labelKey: 'onboarding.stepApps' },
-];
 
 export default function App() {
   return (
@@ -159,8 +147,6 @@ function AppContent() {
   const [selectedAccentColor, setSelectedAccentColor] = useState(accentColors[0]);
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>(defaultLanguage);
-  const [languagePreferenceLoaded, setLanguagePreferenceLoaded] = useState(false);
-  const [languagePreferenceSaved, setLanguagePreferenceSaved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templateCatalogUrl, setTemplateCatalogUrl] = useState(() => getExternalTemplateCatalogUrl());
   const [templateCatalogStatus, setTemplateCatalogStatus] = useState<TemplateCatalogStatus>({ type: 'idle', message: '' });
@@ -182,10 +168,8 @@ function AppContent() {
   });
   const [supabaseAuthBusy, setSupabaseAuthBusy] = useState(false);
   const [supabaseOrganization, setSupabaseOrganization] = useState<SupabaseOrganization | null>(null);
-  const [onboardingCompletedAt, setOnboardingCompletedAt] = useState<string | null>(null);
-  const [onboardingStep, setOnboardingStep] = useState<OnboardingStepId>('language');
-  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>({ type: 'idle', message: '' });
-  const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [welcomeSeenAt, setWelcomeSeenAt] = useState<string | null>(null);
+  const [welcomeStateLoaded, setWelcomeStateLoaded] = useState(false);
   const [aiProviderConfig, setAiProviderConfig] = useState<AiProviderConfig>(defaultAiProviderConfig);
   const [aiSettingsStatus, setAiSettingsStatus] = useState<AiBuildStatus>({ type: 'idle', message: '' });
   const [aiCustomizeOpen, setAiCustomizeOpen] = useState(false);
@@ -219,16 +203,8 @@ function AppContent() {
     () => createSupabaseCloudSyncConfig(supabaseProject, supabaseSession),
     [supabaseProject, supabaseSession],
   );
-  const selectLanguageForOnboarding = async (language: LanguageCode) => {
-    setSelectedLanguage(language);
-    setLanguagePreferenceSaved(true);
-    await saveLanguagePreference(language);
-    setOnboardingStep('apps');
-  };
-
   const selectLanguageFromSettings = async (language: LanguageCode) => {
     setSelectedLanguage(language);
-    setLanguagePreferenceSaved(true);
     await saveLanguagePreference(language);
   };
 
@@ -328,15 +304,10 @@ function AppContent() {
 
         if (language) {
           setSelectedLanguage(language);
-          setLanguagePreferenceSaved(true);
         }
-        setLanguagePreferenceLoaded(true);
       })
       .catch((error) => {
         console.warn('Unable to load language preference.', error);
-        if (active) {
-          setLanguagePreferenceLoaded(true);
-        }
       });
 
     return () => {
@@ -375,12 +346,6 @@ function AppContent() {
   useEffect(() => {
     let active = true;
 
-    if (!languagePreferenceLoaded) {
-      return () => {
-        active = false;
-      };
-    }
-
     loadSupabaseAuthState()
       .then(async (stored) => {
         if (!active) {
@@ -391,8 +356,8 @@ function AppContent() {
         const session = stored.session;
 
         setSupabaseOrganization(stored.organization);
-        setOnboardingCompletedAt(stored.onboardingCompletedAt);
-        setOnboardingStep(getNextOnboardingStep(stored.onboardingCompletedAt, languagePreferenceSaved));
+        setWelcomeSeenAt(stored.welcomeSeenAt);
+        setWelcomeStateLoaded(true);
 
         if (project) {
           setSupabaseProject(project);
@@ -422,7 +387,7 @@ function AppContent() {
             project,
             session: refreshedSession,
             organization: stored.organization,
-            onboardingCompletedAt: stored.onboardingCompletedAt,
+            welcomeSeenAt: stored.welcomeSeenAt,
           });
           setSupabaseAuthStatus({ type: 'signed-in', message: t('status.syncingAs', { identity: refreshedSession.email ?? refreshedSession.userId }) });
         } catch (error) {
@@ -433,7 +398,7 @@ function AppContent() {
             project,
             session: null,
             organization: stored.organization,
-            onboardingCompletedAt: stored.onboardingCompletedAt,
+            welcomeSeenAt: stored.welcomeSeenAt,
           });
           setSupabaseSession(null);
           setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
@@ -441,6 +406,7 @@ function AppContent() {
       })
       .catch((error) => {
         if (active) {
+          setWelcomeStateLoaded(true);
           setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
         }
       });
@@ -448,7 +414,7 @@ function AppContent() {
     return () => {
       active = false;
     };
-  }, [languagePreferenceLoaded, languagePreferenceSaved, t]);
+  }, [t]);
 
   const getSupabaseProjectFromForm = (): SupabaseProjectConfig => ({
     supabaseUrl: supabaseUrl.trim(),
@@ -471,7 +437,6 @@ function AppContent() {
 
     setSupabaseAuthBusy(true);
     setSupabaseAuthStatus({ type: 'loading', message: t('status.signingIn') });
-    setOnboardingStatus({ type: 'loading', message: t('status.signingIn') });
 
     try {
       const session = await signInWithSupabasePassword({ project, email: supabaseEmail, password: supabasePassword });
@@ -482,13 +447,11 @@ function AppContent() {
         project,
         session,
         organization: supabaseOrganization,
-        onboardingCompletedAt,
+        welcomeSeenAt,
       });
       setSupabaseAuthStatus({ type: 'signed-in', message: t('status.syncingAs', { identity: session.email ?? session.userId }) });
-      setOnboardingStatus({ type: 'success', message: t('status.signedIn') });
     } catch (error) {
       setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
-      setOnboardingStatus({ type: 'error', message: getErrorMessage(error) });
     } finally {
       setSupabaseAuthBusy(false);
     }
@@ -509,7 +472,6 @@ function AppContent() {
 
     setSupabaseAuthBusy(true);
     setSupabaseAuthStatus({ type: 'loading', message: t('status.creatingAccount') });
-    setOnboardingStatus({ type: 'loading', message: t('status.creatingAccount') });
 
     try {
       const session = await signUpWithSupabasePassword({ project, email: supabaseEmail, password: supabasePassword });
@@ -521,10 +483,9 @@ function AppContent() {
           project,
           session: null,
           organization: supabaseOrganization,
-          onboardingCompletedAt: null,
+          welcomeSeenAt,
         });
         setSupabaseAuthStatus({ type: 'signed-out', message: t('status.confirmEmail') });
-        setOnboardingStatus({ type: 'success', message: t('status.confirmEmail') });
         return;
       }
 
@@ -535,13 +496,11 @@ function AppContent() {
         project,
         session,
         organization: supabaseOrganization,
-        onboardingCompletedAt,
+        welcomeSeenAt,
       });
       setSupabaseAuthStatus({ type: 'signed-in', message: t('status.syncingAs', { identity: session.email ?? session.userId }) });
-      setOnboardingStatus({ type: 'success', message: t('status.accountCreated') });
     } catch (error) {
       setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
-      setOnboardingStatus({ type: 'error', message: getErrorMessage(error) });
     } finally {
       setSupabaseAuthBusy(false);
     }
@@ -559,7 +518,7 @@ function AppContent() {
         project,
         session: null,
         organization: supabaseOrganization,
-        onboardingCompletedAt,
+        welcomeSeenAt,
       });
       setSupabaseAuthStatus({ type: 'signed-out', message: t('status.signedOut') });
     } catch (error) {
@@ -621,24 +580,18 @@ function AppContent() {
     }
   };
 
-  const completeOnboarding = async () => {
-    setOnboardingBusy(true);
-    setOnboardingStatus({ type: 'loading', message: t('status.finishingSetup') });
-
+  const completeWelcome = async () => {
+    const seenAt = new Date().toISOString();
+    setWelcomeSeenAt(seenAt);
     try {
-      const completedAt = new Date().toISOString();
-      setOnboardingCompletedAt(completedAt);
       await saveSupabaseAuthState({
         project: supabaseProject,
         session: supabaseSession,
         organization: supabaseOrganization,
-        onboardingCompletedAt: completedAt,
+        welcomeSeenAt: seenAt,
       });
-      setOnboardingStatus({ type: 'success', message: t('status.setupComplete') });
     } catch (error) {
-      setOnboardingStatus({ type: 'error', message: getErrorMessage(error) });
-    } finally {
-      setOnboardingBusy(false);
+      console.warn('Unable to save welcome state.', error);
     }
   };
 
@@ -762,21 +715,22 @@ function AppContent() {
   if (!selectedTemplate) {
     const homeTheme = resolveAppTheme(catalog[0].app.theme, globalThemeOverride, systemMode);
 
-    if (!onboardingCompletedAt) {
+    if (!welcomeStateLoaded) {
       return (
         <TamaguiProvider config={tamaguiConfig} defaultTheme={homeTheme.mode}>
           <Theme name={homeTheme.mode}>
-            <OnboardingScreen
-              theme={homeTheme}
-              t={t}
-              selectedLanguage={selectedLanguage}
-              step={onboardingStep}
-              onboardingStatus={onboardingStatus}
-              onboardingBusy={onboardingBusy}
-              onSelectLanguage={selectLanguageForOnboarding}
-              onComplete={completeOnboarding}
-              onBack={setOnboardingStep}
-            />
+            <YStack flex={1} backgroundColor={homeTheme.backgroundColor} />
+            <StatusBar style={homeTheme.mode === 'dark' ? 'light' : 'dark'} />
+          </Theme>
+        </TamaguiProvider>
+      );
+    }
+
+    if (!welcomeSeenAt) {
+      return (
+        <TamaguiProvider config={tamaguiConfig} defaultTheme={homeTheme.mode}>
+          <Theme name={homeTheme.mode}>
+            <WelcomeScreen theme={homeTheme} onComplete={completeWelcome} />
             <StatusBar style={homeTheme.mode === 'dark' ? 'light' : 'dark'} />
           </Theme>
         </TamaguiProvider>
@@ -977,507 +931,161 @@ function createGlobalThemeOverride({
   };
 }
 
-function OnboardingScreen({
+function WelcomeScreen({
   theme,
-  t,
-  selectedLanguage,
-  step,
-  onboardingStatus,
-  onboardingBusy,
-  onSelectLanguage,
   onComplete,
-  onBack,
 }: {
   theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  selectedLanguage: LanguageCode;
-  step: OnboardingStepId;
-  onboardingStatus: OnboardingStatus;
-  onboardingBusy: boolean;
-  onSelectLanguage: (language: LanguageCode) => void;
   onComplete: () => void;
-  onBack: (step: OnboardingStepId) => void;
 }) {
+  const entrance = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  const float = useRef(new Animated.Value(0)).current;
   const { width } = useWindowDimensions();
   const isCompact = width < 520;
-  const stepIndex = onboardingSteps.findIndex((candidate) => candidate.id === step);
-  const safeStepIndex = stepIndex >= 0 ? stepIndex : 0;
-  const status = onboardingStatus;
-  const statusColor =
-    status.type === 'error'
-      ? theme.dangerColor
-      : status.type === 'success'
-        ? theme.successColor
-        : theme.mutedTextColor;
-  const stepMeta = getOnboardingStepMeta(step);
 
-  const pageBackground = theme.mode === 'dark' ? '#06111f' : '#eef5ff';
-  const cardBackground = theme.mode === 'dark' ? '#0f172a' : '#ffffff';
-  const mutedPanelBackground = theme.mode === 'dark' ? '#111827' : '#f8fafc';
-  const cardShadow = theme.mode === 'dark' ? '#000000' : '#2563eb';
-  const canGoBack = safeStepIndex > 0;
-  const previousStep = onboardingSteps[Math.max(safeStepIndex - 1, 0)]?.id ?? 'language';
-  const goToStep = (targetStep: OnboardingStepId) => {
-    const targetIndex = onboardingSteps.findIndex((candidate) => candidate.id === targetStep);
-    if (targetIndex >= 0 && targetIndex <= safeStepIndex) {
-      onBack(targetStep);
-    }
-  };
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(entrance, {
+        toValue: 1,
+        duration: 760,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulse, {
+            toValue: 1,
+            duration: 1300,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulse, {
+            toValue: 0,
+            duration: 1300,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(float, {
+            toValue: 1,
+            duration: 1800,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(float, {
+            toValue: 0,
+            duration: 1800,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+    ]).start();
+  }, [entrance, float, pulse]);
+
+  const shellOpacity = entrance;
+  const shellTranslateY = entrance.interpolate({ inputRange: [0, 1], outputRange: [28, 0] });
+  const logoScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.05] });
+  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
+  const sparkleTranslateY = float.interpolate({ inputRange: [0, 1], outputRange: [0, -14] });
+  const sparkleOpacity = float.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.54, 1, 0.54] });
 
   return (
-    <YStack flex={1} backgroundColor={pageBackground}>
+    <YStack flex={1} backgroundColor={theme.backgroundColor}>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            minHeight: '100%',
-            paddingHorizontal: isCompact ? 20 : 32,
-            paddingTop: isCompact ? 16 : 28,
-            paddingBottom: isCompact ? 20 : 32,
-            justifyContent: 'center',
-          }}
+        <YStack
+          flex={1}
+          justifyContent="center"
+          alignItems="center"
+          paddingHorizontal={isCompact ? '$5' : '$7'}
+          paddingVertical="$7"
+          overflow="hidden"
         >
-          <YStack
-            width="100%"
-            minHeight={isCompact ? 720 : 760}
-            maxWidth={410}
-            alignSelf="center"
-            justifyContent="space-between"
-            gap="$4"
-            padding={isCompact ? '$4' : '$5'}
-            borderRadius={32}
-            borderWidth={1}
-            borderColor={theme.mode === 'dark' ? '#1e293b' : '#e0e7ff'}
-            backgroundColor={cardBackground}
-            shadowColor={cardShadow}
-            shadowOpacity={theme.mode === 'dark' ? 0.3 : 0.18}
-            shadowRadius={32}
-            shadowOffset={{ width: 0, height: 18 }}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: isCompact ? 220 : 300,
+              height: isCompact ? 220 : 300,
+              borderRadius: isCompact ? 110 : 150,
+              backgroundColor: theme.primarySoftColor,
+              opacity: theme.mode === 'dark' ? 0.24 : 0.42,
+              transform: [{ scale: glowScale }],
+            }}
+          />
+          <Animated.View
+            style={{
+              opacity: shellOpacity,
+              transform: [{ translateY: shellTranslateY }],
+              width: '100%',
+              maxWidth: 430,
+            }}
           >
-            <YStack gap="$4">
-              <XStack alignItems="center" justifyContent="space-between" gap="$3">
-                <XStack alignItems="center" gap="$2.5" flex={1} minWidth={0}>
+            <YStack alignItems="center" gap="$6">
+              <YStack width={188} height={188} alignItems="center" justifyContent="center">
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 12,
+                    opacity: sparkleOpacity,
+                    transform: [{ translateY: sparkleTranslateY }],
+                  }}
+                >
+                  <Sparkles color={theme.primaryColor} size={30} strokeWidth={2.1} />
+                </Animated.View>
+                <Animated.View style={{ transform: [{ scale: logoScale }] }}>
                   <YStack
-                    width={40}
-                    height={40}
-                    borderRadius={14}
+                    width={136}
+                    height={136}
+                    borderRadius={40}
                     alignItems="center"
                     justifyContent="center"
                     backgroundColor={theme.primaryColor}
                     shadowColor={theme.primaryColor}
-                    shadowOpacity={0.26}
-                    shadowRadius={10}
-                    shadowOffset={{ width: 0, height: 5 }}
+                    shadowOpacity={theme.mode === 'dark' ? 0.36 : 0.24}
+                    shadowRadius={28}
+                    shadowOffset={{ width: 0, height: 16 }}
                   >
-                    <Sparkles color={theme.primaryContrastColor} size={18} strokeWidth={2.2} />
+                    <Wand2 color={theme.primaryContrastColor} size={58} strokeWidth={2.1} />
                   </YStack>
-                  <YStack flex={1} minWidth={0}>
-                    <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={19} lineHeight={24} fontWeight="900" numberOfLines={1}>
-                      {PRODUCT_NAME}
-                    </Text>
-                    <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={15} fontWeight="700" numberOfLines={1}>
-                      Private app builder
-                    </Text>
-                  </YStack>
-                </XStack>
-                {canGoBack ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('common.back')}
-                    onPress={() => onBack(previousStep)}
-                    style={({ pressed }) => ({
-                      opacity: pressed ? 0.68 : 1,
-                      transform: [{ scale: pressed ? 0.96 : 1 }],
-                    })}
-                  >
-                    <YStack
-                      width={36}
-                      height={36}
-                      alignItems="center"
-                      justifyContent="center"
-                      borderRadius={18}
-                      borderWidth={1}
-                      borderColor={theme.borderColor}
-                      backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
-                    >
-                      <ChevronLeft color={theme.textColor} size={18} strokeWidth={2.3} />
-                    </YStack>
-                  </Pressable>
-                ) : null}
-              </XStack>
-              <OnboardingSlideProgress
-                theme={theme}
-                t={t}
-                step={step}
-                stepIndex={safeStepIndex}
-                onSelectStep={goToStep}
-              />
-              <OnboardingStepHero theme={theme} meta={stepMeta} />
-            </YStack>
-
-            <YStack
-              flex={1}
-              justifyContent="space-between"
-              gap="$4"
-            >
-              <YStack minHeight={isCompact ? 430 : 456} justifyContent="center" gap="$4">
-                {step === 'language' ? (
-                  <OnboardingLanguageStep
-                    theme={theme}
-                    t={t}
-                    selectedLanguage={selectedLanguage}
-                    onSelectLanguage={onSelectLanguage}
-                  />
-                ) : null}
-                {step === 'apps' ? (
-                  <OnboardingAppsStep
-                    theme={theme}
-                    t={t}
-                    onboardingBusy={onboardingBusy}
-                    onComplete={onComplete}
-                  />
-                ) : null}
+                </Animated.View>
               </YStack>
-              {status.message ? <OnboardingStatusBanner theme={theme} status={status} statusColor={statusColor} backgroundColor={mutedPanelBackground} /> : null}
+
+              <YStack alignItems="center" gap="$3">
+                <Text
+                  color={theme.textColor}
+                  textAlign="center"
+                  fontFamily={theme.fontFamilyValue}
+                  fontSize={isCompact ? 38 : 46}
+                  lineHeight={isCompact ? 44 : 52}
+                  fontWeight="900"
+                >
+                  Your apps your way.
+                </Text>
+                <Text
+                  color={theme.primaryColor}
+                  textAlign="center"
+                  fontFamily={theme.fontFamilyValue}
+                  fontSize={isCompact ? 36 : 44}
+                  lineHeight={isCompact ? 42 : 50}
+                  fontWeight="900"
+                >
+                  Tinkaar away!
+                </Text>
+              </YStack>
+
+              <YStack width="100%" maxWidth={320} paddingTop="$4">
+                <PrimaryAction label="Start" theme={theme} onPress={onComplete} />
+              </YStack>
             </YStack>
-
-            <OnboardingTrustChips theme={theme} counter={t('onboarding.stepCounter', { current: safeStepIndex + 1, total: onboardingSteps.length })} />
-          </YStack>
-        </ScrollView>
+          </Animated.View>
+        </YStack>
       </SafeAreaView>
-    </YStack>
-  );
-}
-
-function OnboardingSlideProgress({
-  theme,
-  t,
-  step,
-  stepIndex,
-  onSelectStep,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  step: OnboardingStepId;
-  stepIndex: number;
-  onSelectStep: (step: OnboardingStepId) => void;
-}) {
-  const fillPercent = `${((stepIndex + 1) / onboardingSteps.length) * 100}%`;
-
-  return (
-    <YStack gap="$2.5">
-      <YStack height={7} borderRadius={999} overflow="hidden" backgroundColor={theme.mode === 'dark' ? '#253044' : '#e5e7eb'}>
-        <YStack width={fillPercent} height="100%" borderRadius={999} backgroundColor={theme.primaryColor} />
-      </YStack>
-      <XStack gap="$1.5" alignItems="center" justifyContent="space-between">
-        {onboardingSteps.map((item, index) => {
-          const active = item.id === step;
-          const complete = index < stepIndex;
-          const reachable = index <= stepIndex;
-
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="button"
-              accessibilityLabel={t(item.labelKey)}
-              disabled={!reachable}
-              onPress={() => onSelectStep(item.id)}
-              style={({ pressed }) => ({
-                flex: 1,
-                opacity: pressed ? 0.72 : reachable ? 1 : 0.5,
-                transform: [{ scale: pressed ? 0.98 : 1 }],
-              })}
-            >
-              <Text
-                color={active || complete ? theme.primaryColor : theme.mutedTextColor}
-                textAlign="center"
-                fontFamily={theme.fontFamilyValue}
-                fontSize={10}
-                lineHeight={14}
-                fontWeight={active ? '900' : '700'}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.72}
-              >
-                {t(item.labelKey)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </XStack>
-    </YStack>
-  );
-}
-
-function OnboardingStepHero({
-  theme,
-  meta,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  meta: ReturnType<typeof getOnboardingStepMeta>;
-}) {
-  const Icon = meta.icon;
-
-  return (
-    <XStack
-      gap="$3"
-      alignItems="center"
-      padding="$3"
-      borderRadius={22}
-      borderWidth={1}
-      borderColor={theme.mode === 'dark' ? '#1e293b' : '#dbeafe'}
-      backgroundColor={theme.mode === 'dark' ? '#111827' : '#f8fbff'}
-    >
-      <YStack
-        width={48}
-        height={48}
-        borderRadius={18}
-        alignItems="center"
-        justifyContent="center"
-        backgroundColor={theme.primarySoftColor}
-        borderWidth={1}
-        borderColor={theme.mode === 'dark' ? '#22314a' : '#dbeafe'}
-        flexShrink={0}
-      >
-        <Icon color={theme.primaryColor} size={24} strokeWidth={2.2} />
-      </YStack>
-      <YStack flex={1} minWidth={0} gap="$1">
-        <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={14} fontWeight="900">
-          {meta.eyebrow}
-        </Text>
-        <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={15} lineHeight={20} fontWeight="900" numberOfLines={1}>
-          {meta.title}
-        </Text>
-        <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17} numberOfLines={2}>
-          {meta.copy}
-        </Text>
-      </YStack>
-    </XStack>
-  );
-}
-
-function OnboardingTrustChips({
-  theme,
-  counter,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  counter: string;
-}) {
-  return (
-    <XStack alignItems="center" justifyContent="space-between" gap="$2" paddingBottom="$1">
-      <XStack gap="$1.5" flex={1} minWidth={0}>
-        <MiniTrustChip theme={theme} label="Private" icon={ShieldCheck} />
-        <MiniTrustChip theme={theme} label="AI ready" icon={Wand2} />
-      </XStack>
-      <Text color={theme.mutedTextColor} textAlign="right" fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17} fontWeight="800">
-        {counter}
-      </Text>
-    </XStack>
-  );
-}
-
-function MiniTrustChip({
-  theme,
-  label,
-  icon: Icon,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  label: string;
-  icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
-}) {
-  return (
-    <XStack
-      minHeight={30}
-      alignItems="center"
-      gap="$1.5"
-      paddingHorizontal="$2.5"
-      borderRadius={999}
-      backgroundColor={theme.mode === 'dark' ? '#172033' : '#f1f5f9'}
-      borderWidth={1}
-      borderColor={theme.mode === 'dark' ? '#253044' : '#e2e8f0'}
-    >
-      <Icon color={theme.primaryColor} size={13} strokeWidth={2.3} />
-      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={14} fontWeight="800">
-        {label}
-      </Text>
-    </XStack>
-  );
-}
-
-function OnboardingStatusBanner({
-  theme,
-  status,
-  statusColor,
-  backgroundColor,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  status: OnboardingStatus | SupabaseAuthStatus;
-  statusColor: string;
-  backgroundColor?: string;
-}) {
-  const StatusIcon = status.type === 'error' ? XIcon : CheckCircle2;
-
-  return (
-    <XStack
-      gap="$2.5"
-      alignItems="center"
-      paddingHorizontal="$4"
-      paddingVertical="$3"
-      borderRadius={18}
-      borderWidth={1}
-      borderColor={theme.borderColor}
-      backgroundColor={backgroundColor ?? (theme.mode === 'dark' ? '#101827' : '#ffffff')}
-    >
-      <YStack width={30} height={30} borderRadius={8} alignItems="center" justifyContent="center" backgroundColor={theme.mode === 'dark' ? '#172033' : '#f8fafc'}>
-        <StatusIcon color={statusColor} size={16} strokeWidth={2.2} />
-      </YStack>
-      <Paragraph flex={1} color={statusColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={18}>
-        {status.message}
-      </Paragraph>
-    </XStack>
-  );
-}
-
-function OnboardingLanguageStep({
-  theme,
-  t,
-  selectedLanguage,
-  onSelectLanguage,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  selectedLanguage: LanguageCode;
-  onSelectLanguage: (language: LanguageCode) => void;
-}) {
-  return (
-    <YStack gap="$5">
-      <OnboardingHeader title={t('language.title')} copy={t('language.copy')} theme={theme} />
-      <LanguageSelector theme={theme} selectedLanguage={selectedLanguage} onSelectLanguage={onSelectLanguage} />
-    </YStack>
-  );
-}
-
-function OnboardingAppsStep({
-  theme,
-  t,
-  onboardingBusy,
-  onComplete,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  onboardingBusy: boolean;
-  onComplete: () => void;
-}) {
-  return (
-    <YStack gap="$4">
-      <OnboardingHeader title={t('onboarding.appsTitle')} copy={t('onboarding.appsCopy')} theme={theme} />
-      <YStack padding="$4" borderRadius={18} borderWidth={1} borderColor={theme.borderColor} backgroundColor={theme.mode === 'dark' ? '#172033' : '#f8fafc'}>
-        <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={21}>
-          {t('onboarding.bundledReady')}
-        </Paragraph>
-      </YStack>
-      <PrimaryAction label={onboardingBusy ? t('common.installing') : t('onboarding.finishSetup')} theme={theme} disabled={onboardingBusy} onPress={onComplete} />
-    </YStack>
-  );
-}
-
-function getOnboardingStepMeta(step: OnboardingStepId): {
-  eyebrow: string;
-  title: string;
-  copy: string;
-  icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
-} {
-  switch (step) {
-    case 'language':
-      return {
-        eyebrow: 'START LOCAL',
-        title: 'Choose your language',
-        copy: 'Your apps and records are stored on this device by default.',
-        icon: Languages,
-      };
-    case 'apps':
-      return {
-        eyebrow: 'READY',
-        title: 'Launch your first app',
-        copy: 'Start offline with local SQLite. Cloud Sync can be added later from Settings.',
-        icon: Rocket,
-      };
-  }
-}
-
-function OnboardingHeader({
-  eyebrow,
-  title,
-  copy,
-  theme,
-  compact,
-}: {
-  eyebrow?: string;
-  title: string;
-  copy: string;
-  theme: ReturnType<typeof resolveAppTheme>;
-  compact?: boolean;
-}) {
-  return (
-    <YStack gap="$2">
-      {eyebrow ? (
-        <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={15} fontWeight="900">
-          {eyebrow}
-        </Text>
-      ) : null}
-      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={compact ? 20 : 27} lineHeight={compact ? 26 : 34} fontWeight="900">
-        {title}
-      </Text>
-      <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={15} lineHeight={22}>
-        {copy}
-      </Paragraph>
-    </YStack>
-  );
-}
-
-function LabeledInput({
-  label,
-  value,
-  placeholder,
-  keyboardType,
-  secureTextEntry,
-  theme,
-  onChangeText,
-}: {
-  label: string;
-  value: string;
-  placeholder: string;
-  keyboardType?: 'default' | 'email-address';
-  secureTextEntry?: boolean;
-  theme: ReturnType<typeof resolveAppTheme>;
-  onChangeText: (value: string) => void;
-}) {
-  return (
-    <YStack gap="$2">
-      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={13} fontWeight="800">
-        {label}
-      </Text>
-      <Input
-        minHeight={56}
-        height="auto"
-        value={value}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-        placeholder={placeholder}
-        placeholderTextColor={theme.mutedTextColor as never}
-        backgroundColor={theme.mode === 'dark' ? '#172033' : '#fbfdff'}
-        borderWidth={1}
-        borderColor={theme.borderColor}
-        borderRadius={18}
-        color={theme.textColor}
-        fontFamily={theme.fontFamilyValue}
-        fontSize={14}
-        lineHeight={20}
-        paddingVertical="$3.5"
-        onChangeText={onChangeText}
-      />
     </YStack>
   );
 }
@@ -3490,21 +3098,6 @@ function mergeTemplateSources(sources: InstallableTemplateSource[]) {
   });
 
   return [...sourcesByKey.values()];
-}
-
-function getNextOnboardingStep(
-  completedAt: string | null,
-  languageSaved: boolean,
-): OnboardingStepId {
-  if (completedAt) {
-    return 'apps';
-  }
-
-  if (!languageSaved) {
-    return 'language';
-  }
-
-  return 'apps';
 }
 
 function getWebSearchParams() {
