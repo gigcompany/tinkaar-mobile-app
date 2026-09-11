@@ -22,6 +22,7 @@ export type CloudSyncStore = {
   getPendingCount: (appId: string) => number;
   removeOutboxItems: (ids: string[]) => void;
   markOutboxItemsFailed: (ids: string[], error: string, nextAttemptAt: string) => void;
+  clearAppState: (appId: string) => void;
   getWatermark: (appId: string) => string | null;
   setWatermark: (appId: string, watermark: string) => void;
   getDeviceId: () => string;

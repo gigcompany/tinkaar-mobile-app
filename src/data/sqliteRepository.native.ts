@@ -124,6 +124,14 @@ export function isSQLiteAdapterAvailable() {
   return true;
 }
 
+export async function deleteSQLiteAppData(appId: string, tables: TableDefinition[], databaseName?: string): Promise<void> {
+  const db = openDatabaseSync(databaseName ?? 'ministore.db');
+  tables.forEach((table) => {
+    const physicalTable = getPhysicalTableName(appId, table.tableName);
+    db.execSync(`DROP TABLE IF EXISTS "${physicalTable}"`);
+  });
+}
+
 function getPhysicalTableName(appId: string, tableName: string) {
   return `app_${sanitizeIdentifier(appId)}_${sanitizeIdentifier(tableName)}`;
 }

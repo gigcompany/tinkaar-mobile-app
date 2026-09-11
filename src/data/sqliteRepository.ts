@@ -17,3 +17,9 @@ export function createSQLiteRepository(
 export function isSQLiteAdapterAvailable() {
   return false;
 }
+
+export async function deleteSQLiteAppData(
+  _appId: string,
+  _tables: TableDefinition[],
+  _databaseName?: string,
+): Promise<void> {}

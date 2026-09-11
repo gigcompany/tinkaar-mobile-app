@@ -62,6 +62,13 @@ class WebCloudSyncStore implements CloudSyncStore {
     this.writeState(state);
   }
 
+  clearAppState(appId: string) {
+    const state = this.readState();
+    state.outbox = state.outbox.filter((item) => item.appId !== appId);
+    delete state.watermarks[appId];
+    this.writeState(state);
+  }
+
   getWatermark(appId: string) {
     return this.readState().watermarks[appId] ?? null;
   }

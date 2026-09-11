@@ -44,6 +44,11 @@ class MemoryCloudSyncStore implements CloudSyncStore {
     );
   }
 
+  clearAppState(appId: string) {
+    this.outbox = this.outbox.filter((item) => item.appId !== appId);
+    this.watermarks.delete(appId);
+  }
+
   getWatermark(appId: string) {
     return this.watermarks.get(appId) ?? null;
   }

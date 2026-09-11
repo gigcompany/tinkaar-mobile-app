@@ -1,9 +1,9 @@
 import { Component, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
+import { Alert, Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bot, BriefcaseBusiness, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Handshake, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
+import { Bot, BriefcaseBusiness, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Handshake, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Trash2, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
 import { Button, Input, Paragraph, TamaguiProvider, Text, Theme, XStack, YStack } from 'tamagui';
 import tamaguiConfig from './tamagui.config';
 import {
@@ -30,13 +30,15 @@ import {
   signOutOfSupabase,
   signUpWithSupabasePassword,
   validateSupabaseProjectConfig,
+  deleteSupabaseAppData,
 } from './src/auth/supabaseAuth';
 import { getTemplateCatalog, InstallableTemplateSource, InstalledTemplateRecord, parseTemplateBundle, TemplateBundle, toInstalledTemplateRecord } from './src/apps/catalog';
-import { loadInstalledTemplates, saveInstalledTemplate } from './src/apps/installedTemplateStore';
+import { deleteInstalledTemplate, loadHiddenAppIds, loadInstalledTemplates, saveHiddenAppIds, saveInstalledTemplate } from './src/apps/installedTemplateStore';
 import { fetchTemplateCatalogSources } from './src/apps/templateCatalog';
 import { loadTemplateCatalogUrl, saveTemplateCatalogUrl } from './src/apps/templateCatalogUrlStore';
 import { getExternalAppTemplates, getExternalTemplateCatalogUrl, getExternalTemplateSources, getExternalThemeOverride } from './src/config/themeOverride';
-import { SupabaseCloudSyncConfig, withCloudSyncRepository } from './src/data/cloudSync';
+import { deleteCloudSyncAppState, SupabaseCloudSyncConfig, withCloudSyncRepository } from './src/data/cloudSync';
+import { deleteSQLiteAppData } from './src/data/sqliteRepository';
 import { loadLanguagePreference, saveLanguagePreference } from './src/i18n/languageStore';
 import { defaultLanguage, LanguageCode, supportedLanguages, translate, TranslationKey } from './src/i18n/translations';
 import { createRepository } from './src/data/repository';
@@ -45,6 +47,7 @@ import { dispatchAction } from './src/renderer/actions';
 import { AppRuntimeProvider, useRuntime } from './src/renderer/AppRuntime';
 import { RendererNode } from './src/renderer/RendererNode';
 import { AppThemeMode, AppThemeOverride, appThemeOverrideSchema, resolveAppTheme } from './src/theme/theme';
+import { todoAppDefinition } from './src/apps/todo';
 
 const PRODUCT_NAME = 'Tinkaar';
 const PRODUCT_TAGLINE = 'Your apps, your way!';
@@ -139,8 +142,9 @@ function AppContent() {
   const externalTemplates = useMemo(() => getExternalAppTemplates(), []);
   const externalTemplateSources = useMemo(() => getExternalTemplateSources(), []);
   const [installedTemplates, setInstalledTemplates] = useState<InstalledTemplateRecord[]>([]);
+  const [hiddenAppIds, setHiddenAppIds] = useState<string[]>([]);
   const [remoteTemplateSources, setRemoteTemplateSources] = useState<InstallableTemplateSource[]>([]);
-  const catalog = useMemo(() => getTemplateCatalog([...externalTemplates, ...installedTemplates]), [externalTemplates, installedTemplates]);
+  const catalog = useMemo(() => getTemplateCatalog([...externalTemplates, ...installedTemplates], hiddenAppIds), [externalTemplates, hiddenAppIds, installedTemplates]);
   const bootAppId = useMemo(() => getBootAppId(catalog), [catalog]);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(bootAppId);
   const [selectedThemeMode, setSelectedThemeMode] = useState<AppThemeMode | null>(null);
@@ -156,6 +160,7 @@ function AppContent() {
   const [templateInstallStatus, setTemplateInstallStatus] = useState<TemplateInstallStatus>({ type: 'idle', message: '' });
   const [installingTemplate, setInstallingTemplate] = useState(false);
   const [launchingAppId, setLaunchingAppId] = useState<string | null>(null);
+  const [uninstallingAppId, setUninstallingAppId] = useState<string | null>(null);
   const [supabaseProject, setSupabaseProject] = useState<SupabaseProjectConfig | null>(null);
   const [supabaseSession, setSupabaseSession] = useState<SupabaseAuthSession | null>(null);
   const [supabaseUrl, setSupabaseUrl] = useState(() => supabaseProject?.supabaseUrl ?? '');
@@ -252,14 +257,15 @@ function AppContent() {
   useEffect(() => {
     let active = true;
 
-    loadInstalledTemplates()
-      .then((templates) => {
+    Promise.all([loadInstalledTemplates(), loadHiddenAppIds()])
+      .then(([templates, hiddenIds]) => {
         if (active) {
           setInstalledTemplates(templates);
+          setHiddenAppIds(hiddenIds);
         }
       })
       .catch((error) => {
-        console.warn('Unable to load installed templates.', error);
+        console.warn('Unable to load installed app state.', error);
       });
 
     return () => {
@@ -565,6 +571,7 @@ function AppContent() {
         ),
         installedTemplate,
       ]);
+      setHiddenAppIds((current) => current.filter((appId) => appId !== installedTemplate.app.appId));
       if (!urlOverride) {
         setTemplateInstallUrl('');
       }
@@ -578,6 +585,54 @@ function AppContent() {
       return null;
     } finally {
       setInstallingTemplate(false);
+    }
+  };
+
+  const confirmUninstallTemplate = (template: TemplateBundle) => {
+    const cloudSyncEnabled = Boolean(supabaseProject && supabaseSession);
+    Alert.alert(
+      `Uninstall ${template.app.name}?`,
+      cloudSyncEnabled
+        ? 'This will delete the app and all of its local data. Because Cloud Sync is enabled, synced data for this app will also be deleted from Supabase.'
+        : 'This will delete the app and all of its local data.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Uninstall',
+          style: 'destructive',
+          onPress: () => {
+            void uninstallTemplate(template);
+          },
+        },
+      ],
+    );
+  };
+
+  const uninstallTemplate = async (template: TemplateBundle) => {
+    const appId = template.app.appId;
+    setUninstallingAppId(appId);
+
+    try {
+      if (supabaseProject && supabaseSession) {
+        await deleteSupabaseAppData({ project: supabaseProject, session: supabaseSession, appId });
+        deleteCloudSyncAppState(supabaseSession.userId, appId);
+      }
+
+      await deleteSQLiteAppData(appId, template.app.tables, template.app.data.storage.databaseName);
+      await deleteInstalledTemplate(appId);
+
+      const nextHiddenAppIds = [...new Set([...hiddenAppIds, appId])];
+      await saveHiddenAppIds(nextHiddenAppIds);
+      setHiddenAppIds(nextHiddenAppIds);
+      setInstalledTemplates((current) => current.filter((record) => record.app.appId !== appId));
+      setSelectedAppId((current) => (current === appId ? null : current));
+      setTemplateInstallStatus({ type: 'success', message: `${template.app.name} was uninstalled.` });
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setTemplateInstallStatus({ type: 'error', message });
+      Alert.alert('Unable to uninstall app', message);
+    } finally {
+      setUninstallingAppId(null);
     }
   };
 
@@ -714,7 +769,7 @@ function AppContent() {
   }
 
   if (!selectedTemplate) {
-    const homeTheme = resolveAppTheme(catalog[0].app.theme, globalThemeOverride, systemMode);
+    const homeTheme = resolveAppTheme(catalog[0]?.app.theme ?? todoAppDefinition.theme, globalThemeOverride, systemMode);
 
     if (!welcomeStateLoaded) {
       return (
@@ -753,6 +808,7 @@ function AppContent() {
             selectedCurrency={selectedCurrency}
             installableTemplateSources={availableTemplateSources}
             launchingAppId={launchingAppId}
+            uninstallingAppId={uninstallingAppId}
             launchProgress={launchProgress}
             onOpenSettings={() => setSettingsOpen(true)}
             onCloseSettings={() => setSettingsOpen(false)}
@@ -762,6 +818,7 @@ function AppContent() {
             onSelectCurrency={setSelectedCurrency}
             onSelectLanguage={selectLanguageFromSettings}
             onInstallTemplateSource={(source) => installTemplateFromUrl(source.url)}
+            onUninstall={confirmUninstallTemplate}
             supabaseUrl={supabaseUrl}
             supabaseAnonKey={supabaseAnonKey}
             supabaseTableName={supabaseTableName}
@@ -1425,6 +1482,7 @@ function HomeScreen({
   selectedCurrency,
   installableTemplateSources,
   launchingAppId,
+  uninstallingAppId,
   launchProgress,
   onOpenSettings,
   onCloseSettings,
@@ -1434,6 +1492,7 @@ function HomeScreen({
   onSelectCurrency,
   onSelectLanguage,
   onInstallTemplateSource,
+  onUninstall,
   supabaseUrl,
   supabaseAnonKey,
   supabaseTableName,
@@ -1468,6 +1527,7 @@ function HomeScreen({
   selectedCurrency: CurrencyCode;
   installableTemplateSources: InstallableTemplateSource[];
   launchingAppId: string | null;
+  uninstallingAppId: string | null;
   launchProgress: Animated.Value;
   onOpenSettings: () => void;
   onCloseSettings: () => void;
@@ -1477,6 +1537,7 @@ function HomeScreen({
   onSelectCurrency: (currency: CurrencyCode) => void;
   onSelectLanguage: (language: LanguageCode) => void;
   onInstallTemplateSource: (source: InstallableTemplateSource) => void;
+  onUninstall: (template: TemplateBundle) => void;
   supabaseUrl: string;
   supabaseAnonKey: string;
   supabaseTableName: string;
@@ -1590,18 +1651,45 @@ function HomeScreen({
 
             <YStack gap="$4">
               <SectionHeading theme={theme} title={t('home.installedApps')} detail={`${catalog.length} ready`} />
-              <XStack gap={launcherGap} rowGap={28} flexWrap="wrap" alignItems="flex-start">
-                {catalog.map((template) => (
-                  <LauncherAppTile
-                    key={template.app.appId}
-                    template={template}
-                    theme={theme}
-                    width={tileWidth}
-                    iconSize={iconSize}
-                    onLaunch={onLaunch}
-                  />
-                ))}
-              </XStack>
+              {catalog.length > 0 ? (
+                <XStack gap={launcherGap} rowGap={28} flexWrap="wrap" alignItems="flex-start">
+                  {catalog.map((template) => (
+                    <LauncherAppTile
+                      key={template.app.appId}
+                      template={template}
+                      theme={theme}
+                      width={tileWidth}
+                      iconSize={iconSize}
+                      uninstalling={uninstallingAppId === template.app.appId}
+                      onLaunch={onLaunch}
+                      onUninstall={onUninstall}
+                    />
+                  ))}
+                </XStack>
+              ) : (
+                <YStack
+                  width="100%"
+                  padding="$4"
+                  borderWidth={1}
+                  borderColor={theme.borderColor}
+                  borderRadius={22}
+                  backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
+                >
+                  <XStack gap="$3" alignItems="center">
+                    <YStack width={48} height={48} borderRadius={16} alignItems="center" justifyContent="center" backgroundColor={theme.primarySoftColor}>
+                      <Package color={theme.primaryColor} size={23} strokeWidth={2.2} />
+                    </YStack>
+                    <YStack flex={1} minWidth={0} gap="$1">
+                      <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={15} lineHeight={20} fontWeight="900">
+                        No apps installed
+                      </Text>
+                      <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
+                        Install an app from the catalog below to start again.
+                      </Paragraph>
+                    </YStack>
+                  </XStack>
+                </YStack>
+              )}
             </YStack>
 
             <YStack gap="$4">
@@ -2774,13 +2862,17 @@ function LauncherAppTile({
   theme,
   width,
   iconSize,
+  uninstalling,
   onLaunch,
+  onUninstall,
 }: {
   template: TemplateBundle;
   theme: ReturnType<typeof resolveAppTheme>;
   width: number;
   iconSize: number;
+  uninstalling: boolean;
   onLaunch: (appId: string) => void;
+  onUninstall: (template: TemplateBundle) => void;
 }) {
   const icon = getLauncherIcon(template, theme.mode);
   const Icon = icon.component;
@@ -2839,6 +2931,35 @@ function LauncherAppTile({
               <Wand2 color={theme.primaryContrastColor} size={12} strokeWidth={2.5} />
             </YStack>
           ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Uninstall ${template.app.name}`}
+            disabled={uninstalling}
+            onPress={(event) => {
+              event.stopPropagation();
+              onUninstall(template);
+            }}
+            style={({ pressed }) => ({
+              position: 'absolute',
+              top: -8,
+              right: -8,
+              opacity: uninstalling ? 0.5 : pressed ? 0.76 : 1,
+              transform: [{ scale: pressed ? 0.94 : 1 }],
+            })}
+          >
+            <YStack
+              width={32}
+              height={32}
+              borderRadius={16}
+              alignItems="center"
+              justifyContent="center"
+              backgroundColor={theme.mode === 'dark' ? '#451a1a' : '#fff1f2'}
+              borderWidth={2}
+              borderColor={theme.backgroundColor}
+            >
+              <Trash2 color={theme.dangerColor} size={15} strokeWidth={2.3} />
+            </YStack>
+          </Pressable>
         </YStack>
         <Text
           width="100%"

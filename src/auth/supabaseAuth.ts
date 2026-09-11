@@ -196,6 +196,40 @@ export async function signOutOfSupabase(project: SupabaseProjectConfig, session:
   }
 }
 
+export async function deleteSupabaseAppData({
+  project,
+  session,
+  appId,
+}: {
+  project: SupabaseProjectConfig;
+  session: SupabaseAuthSession;
+  appId: string;
+}) {
+  const baseUrl = normalizeSupabaseUrl(project.supabaseUrl);
+  const headers = getAuthHeaders(project, session.accessToken);
+  const recordsTableName = project.tableName ?? 'ministore_records';
+  const filter = new URLSearchParams({
+    owner_id: `eq.${session.userId}`,
+    app_id: `eq.${appId}`,
+  });
+
+  const responses = await Promise.all([
+    fetch(`${baseUrl}/rest/v1/${encodeURIComponent(recordsTableName)}?${filter.toString()}`, {
+      method: 'DELETE',
+      headers,
+    }),
+    fetch(`${baseUrl}/rest/v1/ministore_app_versions?${filter.toString()}`, {
+      method: 'DELETE',
+      headers,
+    }),
+  ]);
+
+  const failedResponse = responses.find((response) => !response.ok);
+  if (failedResponse) {
+    throw new Error(`Supabase app data delete failed (${failedResponse.status}): ${await failedResponse.text()}`);
+  }
+}
+
 export async function refreshSessionIfNeeded(project: SupabaseProjectConfig, session: SupabaseAuthSession) {
   const refreshAt = session.expiresAt - 60;
   if (Date.now() / 1000 < refreshAt) {

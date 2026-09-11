@@ -31,13 +31,22 @@ const bundledTemplates: TemplateBundle[] = [
   { app: todoAppDefinition, seedData: {}, source: 'bundled' },
 ];
 
-export function getTemplateCatalog(externalTemplates: unknown[]): TemplateBundle[] {
-  const templatesById = new Map(bundledTemplates.map((template) => [template.app.appId, template]));
+export function getTemplateCatalog(externalTemplates: unknown[], hiddenAppIds: string[] = []): TemplateBundle[] {
+  const hiddenAppIdSet = new Set(hiddenAppIds);
+  const templatesById = new Map(
+    bundledTemplates
+      .filter((template) => !hiddenAppIdSet.has(template.app.appId))
+      .map((template) => [template.app.appId, template]),
+  );
 
   externalTemplates.forEach((template) => {
     const parsed = parseTemplateBundle(template, isInstalledTemplateRecord(template) ? 'installed' : 'external');
     if (!parsed.success) {
       console.warn('Ignoring invalid external Tinkaar template.', parsed.errorMessage);
+      return;
+    }
+
+    if (parsed.data.source !== 'installed' && hiddenAppIdSet.has(parsed.data.app.appId)) {
       return;
     }
 

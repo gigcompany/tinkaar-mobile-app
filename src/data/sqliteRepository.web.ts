@@ -123,6 +123,17 @@ export function isSQLiteAdapterAvailable() {
   return typeof globalThis.localStorage !== 'undefined';
 }
 
+export async function deleteSQLiteAppData(appId: string, tables: TableDefinition[], databaseName?: string): Promise<void> {
+  if (typeof globalThis.localStorage === 'undefined') {
+    return;
+  }
+
+  const storagePrefix = `ministore:${databaseName ?? 'ministore'}:${appId}`;
+  tables.forEach((table) => {
+    globalThis.localStorage.removeItem(`${storagePrefix}:${table.tableName}`);
+  });
+}
+
 function isAppRecord(value: unknown): value is AppRecord {
   return typeof value === 'object' && value !== null && typeof (value as AppRecord).id === 'string';
 }

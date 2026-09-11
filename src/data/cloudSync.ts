@@ -92,6 +92,10 @@ export function withCloudSyncRepository({
   };
 }
 
+export function deleteCloudSyncAppState(ownerId: string, appId: string) {
+  createCloudSyncStore(`${ownerId}:${appId}`).clearAppState(appId);
+}
+
 class SupabaseSyncCoordinator {
   private appId: string;
   private endpoint: string;

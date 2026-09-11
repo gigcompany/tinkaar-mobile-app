@@ -2,7 +2,7 @@
 
 Date: 2026-09-04
 
-AppFoundry open-source sync uses a tenant-owned Supabase project. AppFoundry does not provision,
+Tinkaar open-source sync uses a tenant-owned Supabase project. Tinkaar does not provision,
 administer, or store metadata about the tenant's Supabase infrastructure in this mode.
 
 ## Privacy Boundary
@@ -14,7 +14,7 @@ The tenant keeps control of:
 - Business data stored in `public.ministore_records`.
 - AI-generated app versions stored in `public.ministore_app_versions`.
 
-AppFoundry stores only local app configuration on the tenant device:
+Tinkaar stores only local app configuration on the tenant device:
 
 - Supabase project URL.
 - Supabase anon/publishable key.
@@ -23,7 +23,7 @@ AppFoundry stores only local app configuration on the tenant device:
 - AI provider configuration and API key.
 
 Do not paste service-role keys, database passwords, Management API tokens, or OAuth client secrets
-into the AppFoundry app.
+into the Tinkaar app.
 
 ## Tenant Setup Steps
 
@@ -32,10 +32,10 @@ into the AppFoundry app.
 3. Run [`../supabase/schema.sql`](../supabase/schema.sql).
 4. Copy the project URL from Project Settings > API.
 5. Copy the anon/publishable API key from Project Settings > API.
-6. Open AppFoundry and enter the project URL, publishable key, and sync table name
+6. Open Tinkaar and enter the project URL, publishable key, and sync table name
    `ministore_records`.
-7. Create or sign in to the Supabase Auth account from AppFoundry.
-8. Name the AppFoundry organization and finish onboarding.
+7. Create or sign in to the Supabase Auth account from Tinkaar.
+8. Name the Tinkaar organization and finish onboarding.
 9. Configure an AI provider in Settings before using app customization.
 
 ## Optional Environment Prefill

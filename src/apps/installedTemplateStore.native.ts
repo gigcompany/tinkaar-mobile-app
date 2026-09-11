@@ -8,7 +8,11 @@ database.execSync(`
     url TEXT NOT NULL,
     installed_at TEXT NOT NULL,
     payload TEXT NOT NULL
-  )
+  );
+  CREATE TABLE IF NOT EXISTS hidden_apps (
+    app_id TEXT PRIMARY KEY NOT NULL,
+    hidden_at TEXT NOT NULL
+  );
 `);
 
 type InstalledTemplateRow = {
@@ -29,6 +33,24 @@ export async function saveInstalledTemplate(record: InstalledTemplateRecord): Pr
     record.installedAt,
     JSON.stringify(record),
   );
+  database.runSync('DELETE FROM hidden_apps WHERE app_id = ?', record.app.appId);
+}
+
+export async function deleteInstalledTemplate(appId: string): Promise<void> {
+  database.runSync('DELETE FROM installed_templates WHERE app_id = ?', appId);
+}
+
+export async function loadHiddenAppIds(): Promise<string[]> {
+  return database
+    .getAllSync<{ app_id: string }>('SELECT app_id FROM hidden_apps ORDER BY hidden_at ASC')
+    .map((row) => row.app_id);
+}
+
+export async function saveHiddenAppIds(appIds: string[]): Promise<void> {
+  database.execSync('DELETE FROM hidden_apps');
+  [...new Set(appIds)].forEach((appId) => {
+    database.runSync('INSERT OR REPLACE INTO hidden_apps (app_id, hidden_at) VALUES (?, ?)', appId, new Date().toISOString());
+  });
 }
 
 function parseStoredRecord(payload: string): InstalledTemplateRecord[] {

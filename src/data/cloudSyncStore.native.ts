@@ -130,6 +130,11 @@ class NativeCloudSyncStore implements CloudSyncStore {
     });
   }
 
+  clearAppState(appId: string) {
+    this.db.runSync('DELETE FROM sync_outbox WHERE namespace = ? AND app_id = ?', this.namespace, appId);
+    this.db.runSync('DELETE FROM sync_watermarks WHERE namespace = ? AND app_id = ?', this.namespace, appId);
+  }
+
   getWatermark(appId: string) {
     const [row] = this.db.getAllSync<WatermarkRow>(
       'SELECT watermark FROM sync_watermarks WHERE namespace = ? AND app_id = ?',
