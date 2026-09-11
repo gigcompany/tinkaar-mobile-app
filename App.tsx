@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bot, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
+import { Bot, BriefcaseBusiness, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Handshake, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
 import { Button, Input, Paragraph, TamaguiProvider, Text, Theme, XStack, YStack } from 'tamagui';
 import tamaguiConfig from './tamagui.config';
 import {
@@ -46,7 +46,8 @@ import { AppRuntimeProvider, useRuntime } from './src/renderer/AppRuntime';
 import { RendererNode } from './src/renderer/RendererNode';
 import { AppThemeMode, AppThemeOverride, appThemeOverrideSchema, resolveAppTheme } from './src/theme/theme';
 
-const PRODUCT_NAME = 'AppFoundry';
+const PRODUCT_NAME = 'Tinkaar';
+const PRODUCT_TAGLINE = 'Your apps, your way!';
 type ShellThemePreset = {
   id: string;
   name: string;
@@ -1551,7 +1552,7 @@ function HomeScreen({
                     {PRODUCT_NAME}
                   </Text>
                   <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={18} fontWeight="700" numberOfLines={1}>
-                    Apps you can install, run, and reshape.
+                    {PRODUCT_TAGLINE}
                   </Text>
                 </YStack>
               </XStack>
@@ -1726,10 +1727,10 @@ function HomeHeroCard({
             TODAY'S WORKSPACE
           </Text>
           <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={24} lineHeight={30} fontWeight="900">
-            Launch apps, then tune them with AI.
+            Launch apps, then shape them your way.
           </Text>
           <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={21}>
-            Your installed tools sit up front. New templates and AI provider setup stay close, but out of the way.
+            Install what you need, run it locally, and customize when the workflow changes.
           </Paragraph>
         </YStack>
         <YStack width={64} height={64} borderRadius={22} alignItems="center" justifyContent="center" backgroundColor={theme.primaryColor} flexShrink={0}>
@@ -2413,7 +2414,7 @@ function AiProviderSettingsSection({
           autoCapitalize="none"
           autoCorrect={false}
           multiline
-          placeholder='Optional headers JSON, e.g. {"HTTP-Referer":"https://appfoundry.local"}'
+          placeholder='Optional headers JSON, e.g. {"HTTP-Referer":"https://tinkaar.local"}'
           placeholderTextColor={theme.mutedTextColor as never}
           backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
           borderWidth={1}
@@ -2508,7 +2509,7 @@ function AiCustomizeModal({
                     </Text>
                   </XStack>
                   <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={20}>
-                    Describe a tweak to fields, forms, dashboard widgets, validations, or workflow logic. AppFoundry will validate the generated app before saving a new version.
+                    Describe a tweak to fields, forms, dashboard widgets, validations, or workflow logic. Tinkaar will validate the generated app before saving a new version.
                   </Paragraph>
                 </YStack>
                 <YStack gap="$2">
@@ -2868,13 +2869,7 @@ type LauncherIcon = {
 };
 
 function getLauncherIcon(template: TemplateBundle, mode: 'light' | 'dark'): LauncherIcon {
-  const iconKey = template.app.icon ?? template.app.appId;
-
-  if ((template.source === 'external' || template.source === 'installed') && !template.app.icon) {
-    return mode === 'dark'
-      ? { component: DownloadCloud, backgroundColor: '#312e81', borderColor: '#4338ca', highlightColor: '#4f46e5', color: '#c7d2fe' }
-      : { component: DownloadCloud, backgroundColor: '#eef2ff', borderColor: '#c7d2fe', highlightColor: '#ffffff', color: '#4f46e5' };
-  }
+  const iconKey = inferIconKey([template.app.icon, template.app.appId, template.app.name]);
 
   if (iconKey === 'todo' || iconKey === 'check-square') {
     return mode === 'dark'
@@ -2894,13 +2889,25 @@ function getLauncherIcon(template: TemplateBundle, mode: 'light' | 'dark'): Laun
       : { component: WalletCards, backgroundColor: '#f3e8ff', borderColor: '#e9d5ff', highlightColor: '#ffffff', color: '#7e22ce' };
   }
 
+  if (iconKey === 'crm' || iconKey === 'sales' || iconKey === 'deals') {
+    return mode === 'dark'
+      ? { component: BriefcaseBusiness, backgroundColor: '#581c87', borderColor: '#7e22ce', highlightColor: '#a855f7', color: '#f3e8ff' }
+      : { component: BriefcaseBusiness, backgroundColor: '#f3e8ff', borderColor: '#e9d5ff', highlightColor: '#ffffff', color: '#7c3aed' };
+  }
+
+  if (iconKey === 'vendor' || iconKey === 'vendor-management' || iconKey === 'supplier' || iconKey === 'operations') {
+    return mode === 'dark'
+      ? { component: Handshake, backgroundColor: '#164e63', borderColor: '#0891b2', highlightColor: '#06b6d4', color: '#cffafe' }
+      : { component: Handshake, backgroundColor: '#cffafe', borderColor: '#a5f3fc', highlightColor: '#ecfeff', color: '#0891b2' };
+  }
+
   return mode === 'dark'
     ? { component: Package, backgroundColor: '#334155', borderColor: '#475569', highlightColor: '#64748b', color: '#f8fafc' }
     : { component: Package, backgroundColor: '#f1f5f9', borderColor: '#e2e8f0', highlightColor: '#ffffff', color: template.app.theme.light.primaryColor };
 }
 
 function getInstallableTemplateIcon(source: InstallableTemplateSource, mode: 'light' | 'dark'): LauncherIcon {
-  const iconKey = source.icon ?? source.appId ?? source.id;
+  const iconKey = inferIconKey([source.icon, source.appId, source.id, source.name, ...(source.tags ?? [])]);
 
   if (iconKey === 'todo' || iconKey === 'check-square') {
     return mode === 'dark'
@@ -2912,6 +2919,18 @@ function getInstallableTemplateIcon(source: InstallableTemplateSource, mode: 'li
     return mode === 'dark'
       ? { component: WalletCards, backgroundColor: '#581c87', borderColor: '#7e22ce', highlightColor: '#a855f7', color: '#f3e8ff' }
       : { component: WalletCards, backgroundColor: '#f3e8ff', borderColor: '#e9d5ff', highlightColor: '#ffffff', color: '#7e22ce' };
+  }
+
+  if (iconKey === 'crm' || iconKey === 'sales' || iconKey === 'deals') {
+    return mode === 'dark'
+      ? { component: BriefcaseBusiness, backgroundColor: '#581c87', borderColor: '#7e22ce', highlightColor: '#a855f7', color: '#f3e8ff' }
+      : { component: BriefcaseBusiness, backgroundColor: '#f3e8ff', borderColor: '#e9d5ff', highlightColor: '#ffffff', color: '#7c3aed' };
+  }
+
+  if (iconKey === 'vendor' || iconKey === 'vendor-management' || iconKey === 'supplier' || iconKey === 'operations') {
+    return mode === 'dark'
+      ? { component: Handshake, backgroundColor: '#164e63', borderColor: '#0891b2', highlightColor: '#06b6d4', color: '#cffafe' }
+      : { component: Handshake, backgroundColor: '#cffafe', borderColor: '#a5f3fc', highlightColor: '#ecfeff', color: '#0891b2' };
   }
 
   if (iconKey === 'inventory' || iconKey === 'inventory-lite' || iconKey === 'package') {
@@ -2927,8 +2946,36 @@ function getInstallableTemplateIcon(source: InstallableTemplateSource, mode: 'li
   }
 
   return mode === 'dark'
-    ? { component: DownloadCloud, backgroundColor: '#312e81', borderColor: '#4338ca', highlightColor: '#4f46e5', color: '#c7d2fe' }
-    : { component: DownloadCloud, backgroundColor: '#eef2ff', borderColor: '#c7d2fe', highlightColor: '#ffffff', color: '#4f46e5' };
+    ? { component: LayoutGrid, backgroundColor: '#312e81', borderColor: '#4338ca', highlightColor: '#4f46e5', color: '#c7d2fe' }
+    : { component: LayoutGrid, backgroundColor: '#eef2ff', borderColor: '#c7d2fe', highlightColor: '#ffffff', color: '#4f46e5' };
+}
+
+function inferIconKey(values: Array<string | undefined>) {
+  const tokens = values
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map((value) => value.trim().toLowerCase());
+
+  const joined = tokens.join(' ');
+  if (joined.includes('todo') || joined.includes('task') || joined.includes('check')) {
+    return 'todo';
+  }
+  if (joined.includes('crm') || joined.includes('sales') || joined.includes('deal')) {
+    return 'crm';
+  }
+  if (joined.includes('vendor') || joined.includes('supplier') || joined.includes('operation')) {
+    return 'vendor';
+  }
+  if (joined.includes('expense') || joined.includes('wallet') || joined.includes('finance')) {
+    return 'expense-tracker';
+  }
+  if (joined.includes('inventory') || joined.includes('package') || joined.includes('stock')) {
+    return 'inventory';
+  }
+  if (joined.includes('kitchen') || joined.includes('layout') || joined.includes('field-service') || joined.includes('service')) {
+    return 'layout-grid';
+  }
+
+  return tokens[0] ?? '';
 }
 
 function ThemeModeControl({

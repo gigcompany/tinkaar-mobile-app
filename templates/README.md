@@ -1,6 +1,6 @@
-# AppFoundry Template Catalog
+# Tinkaar Template Catalog
 
-AppFoundry loads installable app templates from the configured public JSON catalog.
+Tinkaar loads installable app templates from the configured public JSON catalog.
 
 Catalog shape:
 
@@ -21,11 +21,11 @@ Catalog shape:
 }
 ```
 
-Each `url` must point to an AppFoundry template JSON payload. GitHub `blob` URLs are converted to `raw.githubusercontent.com` before download.
+Each `url` must point to a Tinkaar template JSON payload. GitHub `blob` URLs are converted to `raw.githubusercontent.com` before download.
 
 ## Template Logic
 
-Templates can include declarative logic rules. AppFoundry does not execute arbitrary JavaScript from
+Templates can include declarative logic rules. Tinkaar does not execute arbitrary JavaScript from
 downloaded templates; it only runs whitelisted rule steps.
 
 Supported events:
@@ -84,7 +84,7 @@ Available step types:
 - `showToast`: displays a short message.
 - `validate`: blocks the current submission when the field is empty, or when its `when` condition is false.
 - `stop`: blocks the current action/submission when its optional `when` condition matches.
-- `runAction`: queues an existing whitelisted AppFoundry action such as `navigate`, `openModal`, or `closeModal`.
+- `runAction`: queues an existing whitelisted Tinkaar action such as `navigate`, `openModal`, or `closeModal`.
 
 Conditions support `eq`, `neq`, `contains`, `empty`, `notEmpty`, `gt`, `gte`, `lt`, `lte`, and `in`.
 Values can be literals or references:

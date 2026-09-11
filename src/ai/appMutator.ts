@@ -57,7 +57,7 @@ export async function generateAppMutation({
 
 function createMutationPrompt(currentApp: AppDefinition, userPrompt: string) {
   return [
-    'You are editing an AppFoundry app definition JSON document.',
+    'You are editing a Tinkaar app definition JSON document.',
     'Return only JSON. No markdown fences, no prose outside JSON.',
     'The JSON response must be an object with two keys: "summary" and "app".',
     '"app" must be a complete AppDefinition, not a patch.',
@@ -89,7 +89,7 @@ async function requestOpenAiCompatibleMutation(provider: AiProviderConfig, promp
       messages: [
         {
           role: 'system',
-          content: 'You generate strict JSON app definitions for AppFoundry.',
+          content: 'You generate strict JSON app definitions for Tinkaar.',
         },
         {
           role: 'user',

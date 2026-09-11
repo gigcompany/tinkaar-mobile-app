@@ -119,10 +119,10 @@ const radiusValues: Record<AppThemeDefinition['radius'], number> = {
 };
 
 const fontFamilyValues: Record<AppThemeFontFamily, string | undefined> = {
-  system: undefined,
-  serif: 'Georgia',
-  mono: 'Courier New',
-  rounded: 'Avenir Next',
+  system: '$body',
+  serif: '$body',
+  mono: '$body',
+  rounded: '$body',
 };
 
 export function resolveAppTheme(
@@ -154,8 +154,8 @@ export function resolveAppTheme(
     primarySoftColor: mode === 'dark' ? mixWithBlack(primaryRgb, 0.58) : mixWithWhite(primaryRgb, 0.9),
     radiusValue: radiusValues[merged.radius],
     fontScale: merged.fontScale,
-    fontFamily: merged.fontFamily,
-    fontFamilyValue: fontFamilyValues[merged.fontFamily],
+    fontFamily: 'system',
+    fontFamilyValue: fontFamilyValues.system,
   };
 }
 

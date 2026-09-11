@@ -37,7 +37,7 @@ export function getTemplateCatalog(externalTemplates: unknown[]): TemplateBundle
   externalTemplates.forEach((template) => {
     const parsed = parseTemplateBundle(template, isInstalledTemplateRecord(template) ? 'installed' : 'external');
     if (!parsed.success) {
-      console.warn('Ignoring invalid external AppFoundry template.', parsed.errorMessage);
+      console.warn('Ignoring invalid external Tinkaar template.', parsed.errorMessage);
       return;
     }
 
