@@ -350,7 +350,7 @@ export const appDefinitionSchema = z.object({
   theme: appThemeSchema,
   data: z.object({
     storage: z.object({
-      adapter: z.enum(['sqlite', 'memory']).default('memory'),
+      adapter: z.enum(['sqlite', 'memory']).default('sqlite'),
       databaseName: z.string().optional(),
     }),
     cloudSync: z

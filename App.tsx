@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bot, Building2, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Languages, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Rocket, Settings, ShieldCheck, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
+import { Bot, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Languages, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Rocket, Settings, ShieldCheck, Sparkles, Sun, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
 import { Button, Input, Paragraph, TamaguiProvider, Text, Theme, XStack, YStack } from 'tamagui';
 import tamaguiConfig from './tamagui.config';
 import {
@@ -23,11 +23,9 @@ import {
   SupabaseOrganization,
   SupabaseProjectConfig,
   createSupabaseCloudSyncConfig,
-  getExternalSupabaseProjectConfig,
   loadSupabaseAuthState,
   refreshSessionIfNeeded,
   saveSupabaseAuthState,
-  saveSupabaseOrganization,
   signInWithSupabasePassword,
   signOutOfSupabase,
   signUpWithSupabasePassword,
@@ -123,7 +121,7 @@ type AiBuildStatus =
   | { type: 'success'; message: string }
   | { type: 'error'; message: string };
 
-type OnboardingStepId = 'language' | 'connect' | 'account' | 'organization' | 'apps';
+type OnboardingStepId = 'language' | 'apps';
 
 type OnboardingStatus =
   | { type: 'idle'; message: string }
@@ -134,9 +132,6 @@ type OnboardingStatus =
 const defaultSupabaseTableName = 'ministore_records';
 const onboardingSteps: Array<{ id: OnboardingStepId; labelKey: TranslationKey }> = [
   { id: 'language', labelKey: 'onboarding.stepLanguage' },
-  { id: 'connect', labelKey: 'onboarding.stepCloud' },
-  { id: 'account', labelKey: 'onboarding.stepAccount' },
-  { id: 'organization', labelKey: 'onboarding.stepOrg' },
   { id: 'apps', labelKey: 'onboarding.stepApps' },
 ];
 
@@ -174,7 +169,7 @@ function AppContent() {
   const [templateInstallStatus, setTemplateInstallStatus] = useState<TemplateInstallStatus>({ type: 'idle', message: '' });
   const [installingTemplate, setInstallingTemplate] = useState(false);
   const [launchingAppId, setLaunchingAppId] = useState<string | null>(null);
-  const [supabaseProject, setSupabaseProject] = useState<SupabaseProjectConfig | null>(() => getExternalSupabaseProjectConfig());
+  const [supabaseProject, setSupabaseProject] = useState<SupabaseProjectConfig | null>(null);
   const [supabaseSession, setSupabaseSession] = useState<SupabaseAuthSession | null>(null);
   const [supabaseUrl, setSupabaseUrl] = useState(() => supabaseProject?.supabaseUrl ?? '');
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(() => supabaseProject?.supabaseAnonKey ?? '');
@@ -187,7 +182,6 @@ function AppContent() {
   });
   const [supabaseAuthBusy, setSupabaseAuthBusy] = useState(false);
   const [supabaseOrganization, setSupabaseOrganization] = useState<SupabaseOrganization | null>(null);
-  const [organizationName, setOrganizationName] = useState('');
   const [onboardingCompletedAt, setOnboardingCompletedAt] = useState<string | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStepId>('language');
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>({ type: 'idle', message: '' });
@@ -229,7 +223,7 @@ function AppContent() {
     setSelectedLanguage(language);
     setLanguagePreferenceSaved(true);
     await saveLanguagePreference(language);
-    setOnboardingStep(getNextOnboardingStep(supabaseProject, supabaseSession, supabaseOrganization, onboardingCompletedAt, true));
+    setOnboardingStep('apps');
   };
 
   const selectLanguageFromSettings = async (language: LanguageCode) => {
@@ -393,16 +387,12 @@ function AppContent() {
           return;
         }
 
-        const externalProject = getExternalSupabaseProjectConfig();
-        const project = externalProject ?? stored.project;
+        const project = stored.project;
         const session = stored.session;
 
         setSupabaseOrganization(stored.organization);
-        setOrganizationName(stored.organization?.name ?? '');
         setOnboardingCompletedAt(stored.onboardingCompletedAt);
-        setOnboardingStep(
-          getNextOnboardingStep(project, session, stored.organization, stored.onboardingCompletedAt, languagePreferenceSaved),
-        );
+        setOnboardingStep(getNextOnboardingStep(stored.onboardingCompletedAt, languagePreferenceSaved));
 
         if (project) {
           setSupabaseProject(project);
@@ -443,11 +433,9 @@ function AppContent() {
             project,
             session: null,
             organization: stored.organization,
-            onboardingCompletedAt: null,
+            onboardingCompletedAt: stored.onboardingCompletedAt,
           });
           setSupabaseSession(null);
-          setOnboardingCompletedAt(null);
-          setOnboardingStep('account');
           setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
         }
       })
@@ -498,7 +486,6 @@ function AppContent() {
       });
       setSupabaseAuthStatus({ type: 'signed-in', message: t('status.syncingAs', { identity: session.email ?? session.userId }) });
       setOnboardingStatus({ type: 'success', message: t('status.signedIn') });
-      setOnboardingStep(supabaseOrganization ? 'apps' : 'organization');
     } catch (error) {
       setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
       setOnboardingStatus({ type: 'error', message: getErrorMessage(error) });
@@ -538,7 +525,6 @@ function AppContent() {
         });
         setSupabaseAuthStatus({ type: 'signed-out', message: t('status.confirmEmail') });
         setOnboardingStatus({ type: 'success', message: t('status.confirmEmail') });
-        setOnboardingStep('account');
         return;
       }
 
@@ -553,7 +539,6 @@ function AppContent() {
       });
       setSupabaseAuthStatus({ type: 'signed-in', message: t('status.syncingAs', { identity: session.email ?? session.userId }) });
       setOnboardingStatus({ type: 'success', message: t('status.accountCreated') });
-      setOnboardingStep(supabaseOrganization ? 'apps' : 'organization');
     } catch (error) {
       setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
       setOnboardingStatus({ type: 'error', message: getErrorMessage(error) });
@@ -570,15 +555,13 @@ function AppContent() {
     try {
       await signOutOfSupabase(project, supabaseSession);
       setSupabaseSession(null);
-      setOnboardingCompletedAt(null);
       await saveSupabaseAuthState({
         project,
         session: null,
         organization: supabaseOrganization,
-        onboardingCompletedAt: null,
+        onboardingCompletedAt,
       });
       setSupabaseAuthStatus({ type: 'signed-out', message: t('status.signedOut') });
-      setOnboardingStep('account');
     } catch (error) {
       setSupabaseAuthStatus({ type: 'error', message: getErrorMessage(error) });
     } finally {
@@ -638,70 +621,7 @@ function AppContent() {
     }
   };
 
-  const saveSupabaseProjectForOnboarding = async () => {
-    const project = getSupabaseProjectFromForm();
-    const validationError = validateSupabaseProjectConfig(project);
-    if (validationError) {
-      setOnboardingStatus({ type: 'error', message: validationError });
-      return;
-    }
-
-    setSupabaseProject(project);
-    await saveSupabaseAuthState({
-      project,
-      session: supabaseSession,
-      organization: supabaseOrganization,
-      onboardingCompletedAt,
-    });
-    setOnboardingStatus({ type: 'success', message: t('status.manualProjectConnected') });
-    setOnboardingStep(supabaseSession ? (supabaseOrganization ? 'apps' : 'organization') : 'account');
-  };
-
-  const saveOrganizationForOnboarding = async () => {
-    const name = organizationName.trim();
-    if (!name) {
-      setOnboardingStatus({ type: 'error', message: t('status.enterOrganization') });
-      return;
-    }
-
-    if (!supabaseProject || !supabaseSession) {
-      setOnboardingStatus({ type: 'error', message: t('status.signInBeforeOrg') });
-      setOnboardingStep(supabaseProject ? 'account' : 'connect');
-      return;
-    }
-
-    setOnboardingBusy(true);
-    setOnboardingStatus({ type: 'loading', message: t('status.settingUpOrg') });
-
-    try {
-      const organization = await saveSupabaseOrganization({
-        project: supabaseProject,
-        session: supabaseSession,
-        organizationName: name,
-      });
-      setSupabaseOrganization(organization);
-      await saveSupabaseAuthState({
-        project: supabaseProject,
-        session: supabaseSession,
-        organization,
-        onboardingCompletedAt,
-      });
-      setOnboardingStatus({ type: 'success', message: t('status.orgReady', { name: organization.name }) });
-      setOnboardingStep('apps');
-    } catch (error) {
-      setOnboardingStatus({ type: 'error', message: getErrorMessage(error) });
-    } finally {
-      setOnboardingBusy(false);
-    }
-  };
-
   const completeOnboarding = async () => {
-    if (!supabaseProject || !supabaseSession || !supabaseOrganization) {
-      setOnboardingStep(getNextOnboardingStep(supabaseProject, supabaseSession, supabaseOrganization, null, languagePreferenceSaved));
-      setOnboardingStatus({ type: 'error', message: t('status.finishRequired') });
-      return;
-    }
-
     setOnboardingBusy(true);
     setOnboardingStatus({ type: 'loading', message: t('status.finishingSetup') });
 
@@ -817,7 +737,7 @@ function AppContent() {
         type: 'success',
         message: supabaseSaved
           ? `Saved ${result.app.name} ${result.app.version} locally and in Supabase. ${result.summary}`
-          : `Saved ${result.app.name} ${result.app.version} locally. Sign in to Supabase to store future versions in your account. ${result.summary}`,
+          : `Saved ${result.app.name} ${result.app.version} locally. Enable Cloud Sync in Settings to store future versions in Supabase. ${result.summary}`,
       });
     } catch (error) {
       setAiBuildStatus({ type: 'error', message: getErrorMessage(error) });
@@ -851,29 +771,9 @@ function AppContent() {
               t={t}
               selectedLanguage={selectedLanguage}
               step={onboardingStep}
-              supabaseUrl={supabaseUrl}
-              supabaseAnonKey={supabaseAnonKey}
-              supabaseTableName={supabaseTableName}
-              supabaseEmail={supabaseEmail}
-              supabasePassword={supabasePassword}
-              supabaseSession={supabaseSession}
-              supabaseAuthStatus={supabaseAuthStatus}
-              supabaseAuthBusy={supabaseAuthBusy}
-              organizationName={organizationName}
-              supabaseOrganization={supabaseOrganization}
               onboardingStatus={onboardingStatus}
               onboardingBusy={onboardingBusy}
               onSelectLanguage={selectLanguageForOnboarding}
-              onChangeSupabaseUrl={setSupabaseUrl}
-              onChangeSupabaseAnonKey={setSupabaseAnonKey}
-              onChangeSupabaseTableName={setSupabaseTableName}
-              onChangeSupabaseEmail={setSupabaseEmail}
-              onChangeSupabasePassword={setSupabasePassword}
-              onChangeOrganizationName={setOrganizationName}
-              onSaveProject={saveSupabaseProjectForOnboarding}
-              onSupabaseSignIn={signInToSupabase}
-              onSupabaseSignUp={signUpToSupabase}
-              onSaveOrganization={saveOrganizationForOnboarding}
               onComplete={completeOnboarding}
               onBack={setOnboardingStep}
             />
@@ -1082,29 +982,9 @@ function OnboardingScreen({
   t,
   selectedLanguage,
   step,
-  supabaseUrl,
-  supabaseAnonKey,
-  supabaseTableName,
-  supabaseEmail,
-  supabasePassword,
-  supabaseSession,
-  supabaseAuthStatus,
-  supabaseAuthBusy,
-  organizationName,
-  supabaseOrganization,
   onboardingStatus,
   onboardingBusy,
   onSelectLanguage,
-  onChangeSupabaseUrl,
-  onChangeSupabaseAnonKey,
-  onChangeSupabaseTableName,
-  onChangeSupabaseEmail,
-  onChangeSupabasePassword,
-  onChangeOrganizationName,
-  onSaveProject,
-  onSupabaseSignIn,
-  onSupabaseSignUp,
-  onSaveOrganization,
   onComplete,
   onBack,
 }: {
@@ -1112,29 +992,9 @@ function OnboardingScreen({
   t: Translator;
   selectedLanguage: LanguageCode;
   step: OnboardingStepId;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-  supabaseTableName: string;
-  supabaseEmail: string;
-  supabasePassword: string;
-  supabaseSession: SupabaseAuthSession | null;
-  supabaseAuthStatus: SupabaseAuthStatus;
-  supabaseAuthBusy: boolean;
-  organizationName: string;
-  supabaseOrganization: SupabaseOrganization | null;
   onboardingStatus: OnboardingStatus;
   onboardingBusy: boolean;
   onSelectLanguage: (language: LanguageCode) => void;
-  onChangeSupabaseUrl: (value: string) => void;
-  onChangeSupabaseAnonKey: (value: string) => void;
-  onChangeSupabaseTableName: (value: string) => void;
-  onChangeSupabaseEmail: (value: string) => void;
-  onChangeSupabasePassword: (value: string) => void;
-  onChangeOrganizationName: (value: string) => void;
-  onSaveProject: () => void;
-  onSupabaseSignIn: () => void;
-  onSupabaseSignUp: () => void;
-  onSaveOrganization: () => void;
   onComplete: () => void;
   onBack: (step: OnboardingStepId) => void;
 }) {
@@ -1142,14 +1002,11 @@ function OnboardingScreen({
   const isCompact = width < 520;
   const stepIndex = onboardingSteps.findIndex((candidate) => candidate.id === step);
   const safeStepIndex = stepIndex >= 0 ? stepIndex : 0;
-  const status =
-    onboardingStatus.message && onboardingStatus.type !== 'idle'
-      ? onboardingStatus
-      : { type: supabaseAuthStatus.type, message: supabaseAuthStatus.message };
+  const status = onboardingStatus;
   const statusColor =
     status.type === 'error'
       ? theme.dangerColor
-      : status.type === 'success' || status.type === 'signed-in'
+      : status.type === 'success'
         ? theme.successColor
         : theme.mutedTextColor;
   const stepMeta = getOnboardingStepMeta(step);
@@ -1270,44 +1127,6 @@ function OnboardingScreen({
                     t={t}
                     selectedLanguage={selectedLanguage}
                     onSelectLanguage={onSelectLanguage}
-                  />
-                ) : null}
-                {step === 'connect' ? (
-                  <OnboardingConnectStep
-                    theme={theme}
-                    t={t}
-                    supabaseUrl={supabaseUrl}
-                    supabaseAnonKey={supabaseAnonKey}
-                    supabaseTableName={supabaseTableName}
-                    onChangeSupabaseUrl={onChangeSupabaseUrl}
-                    onChangeSupabaseAnonKey={onChangeSupabaseAnonKey}
-                    onChangeSupabaseTableName={onChangeSupabaseTableName}
-                    onSaveProject={onSaveProject}
-                  />
-                ) : null}
-                {step === 'account' ? (
-                  <OnboardingAccountStep
-                    theme={theme}
-                    t={t}
-                    supabaseEmail={supabaseEmail}
-                    supabasePassword={supabasePassword}
-                    supabaseSession={supabaseSession}
-                    supabaseAuthBusy={supabaseAuthBusy}
-                    onChangeSupabaseEmail={onChangeSupabaseEmail}
-                    onChangeSupabasePassword={onChangeSupabasePassword}
-                    onSupabaseSignIn={onSupabaseSignIn}
-                    onSupabaseSignUp={onSupabaseSignUp}
-                    onContinue={() => onBack(supabaseOrganization ? 'apps' : 'organization')}
-                  />
-                ) : null}
-                {step === 'organization' ? (
-                  <OnboardingOrganizationStep
-                    theme={theme}
-                    t={t}
-                    organizationName={organizationName}
-                    onboardingBusy={onboardingBusy}
-                    onChangeOrganizationName={onChangeOrganizationName}
-                    onSaveOrganization={onSaveOrganization}
                   />
                 ) : null}
                 {step === 'apps' ? (
@@ -1538,113 +1357,6 @@ function OnboardingLanguageStep({
   );
 }
 
-function OnboardingConnectStep({
-  theme,
-  t,
-  supabaseUrl,
-  supabaseAnonKey,
-  supabaseTableName,
-  onChangeSupabaseUrl,
-  onChangeSupabaseAnonKey,
-  onChangeSupabaseTableName,
-  onSaveProject,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-  supabaseTableName: string;
-  onChangeSupabaseUrl: (value: string) => void;
-  onChangeSupabaseAnonKey: (value: string) => void;
-  onChangeSupabaseTableName: (value: string) => void;
-  onSaveProject: () => void;
-}) {
-  return (
-    <YStack gap="$4">
-      <OnboardingHeader title={t('onboarding.cloudTitle')} copy={t('onboarding.cloudCopy')} theme={theme} />
-      <YStack gap="$3">
-        <LabeledInput label={t('onboarding.projectUrl')} value={supabaseUrl} placeholder="https://project-ref.supabase.co" theme={theme} onChangeText={onChangeSupabaseUrl} />
-        <LabeledInput label={t('onboarding.publishableKey')} value={supabaseAnonKey} placeholder="sb_publishable_..." theme={theme} onChangeText={onChangeSupabaseAnonKey} />
-        <LabeledInput label={t('onboarding.syncTable')} value={supabaseTableName} placeholder={defaultSupabaseTableName} theme={theme} onChangeText={onChangeSupabaseTableName} />
-        <PrimaryAction label={t('onboarding.saveTenantProject')} theme={theme} onPress={onSaveProject} />
-      </YStack>
-      <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17}>
-        {t('onboarding.manualCopy')}
-      </Paragraph>
-    </YStack>
-  );
-}
-
-function OnboardingAccountStep({
-  theme,
-  t,
-  supabaseEmail,
-  supabasePassword,
-  supabaseSession,
-  supabaseAuthBusy,
-  onChangeSupabaseEmail,
-  onChangeSupabasePassword,
-  onSupabaseSignIn,
-  onSupabaseSignUp,
-  onContinue,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  supabaseEmail: string;
-  supabasePassword: string;
-  supabaseSession: SupabaseAuthSession | null;
-  supabaseAuthBusy: boolean;
-  onChangeSupabaseEmail: (value: string) => void;
-  onChangeSupabasePassword: (value: string) => void;
-  onSupabaseSignIn: () => void;
-  onSupabaseSignUp: () => void;
-  onContinue: () => void;
-}) {
-  return (
-    <YStack gap="$4">
-      <OnboardingHeader title={t('onboarding.accountTitle')} copy={t('onboarding.accountCopy')} theme={theme} />
-      <LabeledInput label={t('onboarding.email')} value={supabaseEmail} placeholder="you@company.com" keyboardType="email-address" theme={theme} onChangeText={onChangeSupabaseEmail} />
-      <LabeledInput label={t('onboarding.password')} value={supabasePassword} placeholder={t('onboarding.password')} secureTextEntry theme={theme} onChangeText={onChangeSupabasePassword} />
-      {supabaseSession ? (
-        <PrimaryAction label={t('common.continue')} theme={theme} onPress={onContinue} />
-      ) : (
-        <XStack gap="$2" rowGap="$2" flexWrap="wrap">
-          <Button size="$4" minHeight={52} height="auto" paddingVertical="$3" flexGrow={1} disabled={supabaseAuthBusy} backgroundColor={theme.primaryColor} borderRadius={16} color={theme.primaryContrastColor} fontFamily={theme.fontFamilyValue} fontWeight="900" onPress={onSupabaseSignIn}>
-            {t('onboarding.signIn')}
-          </Button>
-          <Button size="$4" minHeight={52} height="auto" paddingVertical="$3" flexGrow={1} disabled={supabaseAuthBusy} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'} borderWidth={1} borderColor={theme.borderColor} borderRadius={16} color={theme.textColor} fontFamily={theme.fontFamilyValue} fontWeight="900" onPress={onSupabaseSignUp}>
-            {t('onboarding.createAccount')}
-          </Button>
-        </XStack>
-      )}
-    </YStack>
-  );
-}
-
-function OnboardingOrganizationStep({
-  theme,
-  t,
-  organizationName,
-  onboardingBusy,
-  onChangeOrganizationName,
-  onSaveOrganization,
-}: {
-  theme: ReturnType<typeof resolveAppTheme>;
-  t: Translator;
-  organizationName: string;
-  onboardingBusy: boolean;
-  onChangeOrganizationName: (value: string) => void;
-  onSaveOrganization: () => void;
-}) {
-  return (
-    <YStack gap="$4">
-      <OnboardingHeader title={t('onboarding.orgTitle')} copy={t('onboarding.orgCopy')} theme={theme} />
-      <LabeledInput label={t('onboarding.orgName')} value={organizationName} placeholder="Riverbend Works" theme={theme} onChangeText={onChangeOrganizationName} />
-      <PrimaryAction label={onboardingBusy ? t('onboarding.orgSaving') : t('onboarding.createOrg')} theme={theme} disabled={onboardingBusy} onPress={onSaveOrganization} />
-    </YStack>
-  );
-}
-
 function OnboardingAppsStep({
   theme,
   t,
@@ -1678,37 +1390,16 @@ function getOnboardingStepMeta(step: OnboardingStepId): {
   switch (step) {
     case 'language':
       return {
-        eyebrow: 'START HERE',
-        title: 'Make setup feel familiar',
-        copy: 'Choose the language that makes every next step easier to trust.',
+        eyebrow: 'START LOCAL',
+        title: 'Choose your language',
+        copy: 'Your apps and records are stored on this device by default.',
         icon: Languages,
-      };
-    case 'connect':
-      return {
-        eyebrow: 'YOUR CLOUD',
-        title: 'Bring your own Supabase',
-        copy: 'Records and generated app versions stay in the tenant account.',
-        icon: Cloud,
-      };
-    case 'account':
-      return {
-        eyebrow: 'SECURE ACCESS',
-        title: 'Sign in to sync safely',
-        copy: 'Supabase Auth keeps each workspace tied to its owner.',
-        icon: ShieldCheck,
-      };
-    case 'organization':
-      return {
-        eyebrow: 'WORKSPACE',
-        title: 'Name the shared home',
-        copy: 'A simple identity for the apps, records, and tweaks your team owns.',
-        icon: Building2,
       };
     case 'apps':
       return {
         eyebrow: 'READY',
-        title: 'Launch with a clean starter',
-        copy: 'Begin with the bundled app, then install and customize more.',
+        title: 'Launch your first app',
+        copy: 'Start offline with local SQLite. Cloud Sync can be added later from Settings.',
         icon: Rocket,
       };
   }
@@ -1846,7 +1537,7 @@ function SelectedTemplateRuntime({
     () => {
       const localRepository = createRepository({
         appId: template.app.appId,
-        adapter: template.app.data.storage.adapter,
+        adapter: 'sqlite',
         databaseName: template.app.data.storage.databaseName,
         tables: template.app.tables,
         seed: template.seedData,
@@ -3130,7 +2821,7 @@ function AiProviderSettingsSection({
       </YStack>
       <XStack alignItems="center" justifyContent="space-between" gap="$3" flexWrap="wrap">
         <Paragraph flex={1} minWidth={220} color={status.message ? statusColor : theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={18}>
-          {status.message || 'Keys stay on this device. App versions are stored in Supabase when you are signed in.'}
+          {status.message || 'Keys stay on this device. Supabase is only used after you enable Cloud Sync here.'}
         </Paragraph>
         <Button
           size="$3"
@@ -3241,7 +2932,7 @@ function AiCustomizeModal({
                     Versioning
                   </Text>
                   <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
-                    {versionCount} saved versions for this app. New versions replace the installed app locally and {supabaseReady ? 'will be stored in your Supabase account.' : 'will sync to Supabase after you sign in and run the updated schema.'}
+                    {versionCount} saved versions for this app. New versions replace the installed app locally and {supabaseReady ? 'will be stored in your Supabase account.' : 'can sync to Supabase after Cloud Sync is enabled in Settings.'}
                   </Paragraph>
                 </YStack>
                 {status.message ? (
@@ -3802,9 +3493,6 @@ function mergeTemplateSources(sources: InstallableTemplateSource[]) {
 }
 
 function getNextOnboardingStep(
-  project: SupabaseProjectConfig | null,
-  session: SupabaseAuthSession | null,
-  organization: SupabaseOrganization | null,
   completedAt: string | null,
   languageSaved: boolean,
 ): OnboardingStepId {
@@ -3814,18 +3502,6 @@ function getNextOnboardingStep(
 
   if (!languageSaved) {
     return 'language';
-  }
-
-  if (!project) {
-    return 'connect';
-  }
-
-  if (!session) {
-    return 'account';
-  }
-
-  if (!organization) {
-    return 'organization';
   }
 
   return 'apps';
