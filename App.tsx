@@ -15,7 +15,7 @@ import {
   validateAiProviderConfig,
 } from './src/ai/providerConfig';
 import { loadAiProviderConfig, saveAiProviderConfig } from './src/ai/providerConfigStore';
-import { generateAppMutation } from './src/ai/appMutator';
+import { APP_MUTATION_INSTRUCTIONS, APP_MUTATION_SYSTEM_PROMPT, generateAppMutation } from './src/ai/appMutator';
 import { AppVersionRecord, loadAppVersions, saveAppVersionRecord } from './src/ai/appVersionStore';
 import { saveAppVersionToSupabase } from './src/ai/appVersionSupabase';
 import {
@@ -2653,6 +2653,8 @@ function AiCustomizeModal({
                     {versionCount} saved versions for this app. New versions replace the installed app locally and {supabaseReady ? 'will be stored in your Supabase account.' : 'can sync to Supabase after Cloud Sync is enabled in Settings.'}
                   </Paragraph>
                 </YStack>
+                {busy ? <GenerationProgressCard theme={theme} /> : null}
+                <AgentPromptCard theme={theme} />
                 {status.message ? (
                   <YStack padding="$4" borderRadius={18} borderWidth={1} borderColor={theme.borderColor} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}>
                     <Paragraph color={statusColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
@@ -2698,6 +2700,202 @@ function AiCustomizeModal({
         </SafeAreaView>
       </Theme>
     </Modal>
+  );
+}
+
+function GenerationProgressCard({ theme }: { theme: ReturnType<typeof resolveAppTheme> }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  const sweep = useRef(new Animated.Value(0)).current;
+  const orbit = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 980,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 980,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const sweepLoop = Animated.loop(
+      Animated.timing(sweep, {
+        toValue: 1,
+        duration: 1900,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    );
+    const orbitLoop = Animated.loop(
+      Animated.timing(orbit, {
+        toValue: 1,
+        duration: 2200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+
+    pulseLoop.start();
+    sweepLoop.start();
+    orbitLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+      sweepLoop.stop();
+      orbitLoop.stop();
+    };
+  }, [orbit, pulse, sweep]);
+
+  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.12] });
+  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.24, 0.52] });
+  const sweepTranslate = sweep.interpolate({ inputRange: [0, 1], outputRange: [-220, 420] });
+  const orbitRotate = orbit.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const sparkleTranslate = pulse.interpolate({ inputRange: [0, 1], outputRange: [5, -5] });
+
+  return (
+    <YStack
+      minHeight={142}
+      padding="$4"
+      gap="$3"
+      overflow="hidden"
+      borderRadius={20}
+      borderWidth={1}
+      borderColor={theme.primarySoftColor}
+      backgroundColor={theme.mode === 'dark' ? '#101827' : '#f8fbff'}
+      shadowColor={theme.primaryColor}
+      shadowOpacity={theme.mode === 'dark' ? 0.18 : 0.1}
+      shadowRadius={24}
+      shadowOffset={{ width: 0, height: 12 }}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          width: 120,
+          opacity: theme.mode === 'dark' ? 0.18 : 0.28,
+          backgroundColor: theme.primarySoftColor,
+          transform: [{ translateX: sweepTranslate }, { skewX: '-14deg' }],
+        }}
+      />
+      <XStack alignItems="center" gap="$4">
+        <YStack width={72} height={72} alignItems="center" justifyContent="center" flexShrink={0}>
+          <Animated.View
+            style={{
+              position: 'absolute',
+              width: 62,
+              height: 62,
+              borderRadius: 31,
+              backgroundColor: theme.primarySoftColor,
+              opacity: glowOpacity,
+              transform: [{ scale: glowScale }],
+            }}
+          />
+          <Animated.View style={{ transform: [{ rotate: orbitRotate }] }}>
+            <YStack
+              width={54}
+              height={54}
+              borderRadius={19}
+              alignItems="center"
+              justifyContent="center"
+              backgroundColor={theme.primaryColor}
+              shadowColor={theme.primaryColor}
+              shadowOpacity={0.26}
+              shadowRadius={18}
+              shadowOffset={{ width: 0, height: 8 }}
+            >
+              <Bot color={theme.primaryContrastColor} size={25} strokeWidth={2.2} />
+            </YStack>
+          </Animated.View>
+          <Animated.View
+            style={{
+              position: 'absolute',
+              right: 3,
+              top: 1,
+              transform: [{ translateY: sparkleTranslate }],
+            }}
+          >
+            <Sparkles color={theme.primaryColor} size={18} strokeWidth={2.3} />
+          </Animated.View>
+        </YStack>
+        <YStack flex={1} minWidth={0} gap="$2">
+          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={16} lineHeight={22} fontWeight="900">
+            Building a new version
+          </Text>
+          <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
+            Reading the schema, reshaping the app definition, and validating the generated JSON before it replaces the installed version.
+          </Paragraph>
+          <XStack gap="$1.5" paddingTop="$1">
+            {[0, 1, 2, 3].map((step) => (
+              <YStack
+                key={step}
+                flex={1}
+                height={5}
+                borderRadius={999}
+                backgroundColor={theme.primarySoftColor}
+                overflow="hidden"
+              >
+                <Animated.View
+                  style={{
+                    width: '100%',
+                    height: 5,
+                    borderRadius: 999,
+                    backgroundColor: theme.primaryColor,
+                    opacity: pulse.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: step % 2 === 0 ? [0.28, 1, 0.28] : [1, 0.28, 1],
+                    }),
+                  }}
+                />
+              </YStack>
+            ))}
+          </XStack>
+        </YStack>
+      </XStack>
+    </YStack>
+  );
+}
+
+function AgentPromptCard({ theme }: { theme: ReturnType<typeof resolveAppTheme> }) {
+  const instructionText = APP_MUTATION_INSTRUCTIONS.join('\n');
+
+  return (
+    <YStack padding="$4" gap="$3" borderRadius={18} borderWidth={1} borderColor={theme.borderColor} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}>
+      <XStack alignItems="center" gap="$2">
+        <Bot color={theme.primaryColor} size={18} strokeWidth={2.2} />
+        <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={14} fontWeight="900">
+          Code generation agent prompt
+        </Text>
+      </XStack>
+      <YStack gap="$2">
+        <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="800">
+          System
+        </Text>
+        <YStack padding="$3" borderRadius={14} backgroundColor={theme.mode === 'dark' ? '#0b1120' : '#f8fafc'} borderWidth={1} borderColor={theme.borderColor}>
+          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={18}>
+            {APP_MUTATION_SYSTEM_PROMPT}
+          </Text>
+        </YStack>
+      </YStack>
+      <YStack gap="$2">
+        <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="800">
+          App definition rules
+        </Text>
+        <YStack padding="$3" borderRadius={14} backgroundColor={theme.mode === 'dark' ? '#0b1120' : '#f8fafc'} borderWidth={1} borderColor={theme.borderColor}>
+          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={18}>
+            {instructionText}
+          </Text>
+        </YStack>
+      </YStack>
+    </YStack>
   );
 }
 

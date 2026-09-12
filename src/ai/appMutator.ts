@@ -6,6 +6,20 @@ export type AppMutationResult = {
   summary: string;
 };
 
+export const APP_MUTATION_SYSTEM_PROMPT = 'You generate strict JSON app definitions for Tinkaar.';
+
+export const APP_MUTATION_INSTRUCTIONS = [
+  'You are editing a Tinkaar app definition JSON document.',
+  'Return only JSON. No markdown fences, no prose outside JSON.',
+  'The JSON response must be an object with two keys: "summary" and "app".',
+  '"app" must be a complete AppDefinition, not a patch.',
+  'Keep the same appId. Preserve existing tables, pages, navigation, data storage, and cloudSync unless the user explicitly asks to change them.',
+  'Use only these node kinds: primitive, complex, container, widget.',
+  'Use only supported action types: createRecord, updateRecord, deleteRecord, openModal, closeModal, navigate, toggleField, showToast.',
+  'Use only supported field types from the current app schema.',
+  'Make app changes practical for a mobile CRUD app: add fields to forms and lists when needed, keep labels short, and preserve required validations.',
+];
+
 type OpenAiCompatibleResponse = {
   choices?: Array<{
     message?: {
@@ -57,15 +71,7 @@ export async function generateAppMutation({
 
 function createMutationPrompt(currentApp: AppDefinition, userPrompt: string) {
   return [
-    'You are editing a Tinkaar app definition JSON document.',
-    'Return only JSON. No markdown fences, no prose outside JSON.',
-    'The JSON response must be an object with two keys: "summary" and "app".',
-    '"app" must be a complete AppDefinition, not a patch.',
-    'Keep the same appId. Preserve existing tables, pages, navigation, data storage, and cloudSync unless the user explicitly asks to change them.',
-    'Use only these node kinds: primitive, complex, container, widget.',
-    'Use only supported action types: createRecord, updateRecord, deleteRecord, openModal, closeModal, navigate, toggleField, showToast.',
-    'Use only supported field types from the current app schema.',
-    'Make app changes practical for a mobile CRUD app: add fields to forms and lists when needed, keep labels short, and preserve required validations.',
+    ...APP_MUTATION_INSTRUCTIONS,
     '',
     `User request: ${userPrompt}`,
     '',
@@ -81,7 +87,7 @@ async function requestOpenAiCompatibleMutation(provider: AiProviderConfig, promp
     messages: [
       {
         role: 'system',
-        content: 'You generate strict JSON app definitions for Tinkaar.',
+        content: APP_MUTATION_SYSTEM_PROMPT,
       },
       {
         role: 'user',
