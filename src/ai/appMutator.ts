@@ -75,6 +75,25 @@ function createMutationPrompt(currentApp: AppDefinition, userPrompt: string) {
 }
 
 async function requestOpenAiCompatibleMutation(provider: AiProviderConfig, prompt: string) {
+  const requestBody: Record<string, unknown> = {
+    model: provider.model.trim(),
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content: 'You generate strict JSON app definitions for Tinkaar.',
+      },
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+  };
+
+  if (!usesDefaultTemperatureOnly(provider)) {
+    requestBody.temperature = 0.2;
+  }
+
   const response = await fetch(`${trimTrailingSlash(provider.baseUrl)}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -82,21 +101,7 @@ async function requestOpenAiCompatibleMutation(provider: AiProviderConfig, promp
       'Content-Type': 'application/json',
       ...parseExtraHeaders(provider.headersJson),
     },
-    body: JSON.stringify({
-      model: provider.model.trim(),
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: 'You generate strict JSON app definitions for Tinkaar.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -110,6 +115,21 @@ async function requestOpenAiCompatibleMutation(provider: AiProviderConfig, promp
   }
 
   return content;
+}
+
+function usesDefaultTemperatureOnly(provider: AiProviderConfig) {
+  const baseUrl = provider.baseUrl.trim().toLowerCase();
+  const model = provider.model.trim().toLowerCase();
+
+  return (
+    provider.presetId === 'microsoft-foundry' ||
+    baseUrl.includes('services.ai.azure.com') ||
+    baseUrl.includes('.openai.azure.com') ||
+    baseUrl.includes('ai.azure.com') ||
+    model.startsWith('gpt-5') ||
+    model.startsWith('gpt-6') ||
+    /^o\d/.test(model)
+  );
 }
 
 async function requestGeminiMutation(provider: AiProviderConfig, prompt: string) {
