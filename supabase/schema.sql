@@ -102,13 +102,6 @@ create policy "Users can delete their own MiniStore records"
   for delete
   using (auth.uid() = owner_id);
 
-do $$
-begin
-  execute 'drop policy if exists "Users can read their own App' || 'Foundry app versions" on public.ministore_app_versions';
-  execute 'drop policy if exists "Users can insert their own App' || 'Foundry app versions" on public.ministore_app_versions';
-  execute 'drop policy if exists "Users can update their own App' || 'Foundry app versions" on public.ministore_app_versions';
-  execute 'drop policy if exists "Users can delete their own App' || 'Foundry app versions" on public.ministore_app_versions';
-end $$;
 drop policy if exists "Users can read their own Tinkaar app versions" on public.ministore_app_versions;
 drop policy if exists "Users can insert their own Tinkaar app versions" on public.ministore_app_versions;
 drop policy if exists "Users can update their own Tinkaar app versions" on public.ministore_app_versions;

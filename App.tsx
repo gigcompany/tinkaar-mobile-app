@@ -209,6 +209,14 @@ function AppContent() {
     () => createSupabaseCloudSyncConfig(supabaseProject, supabaseSession),
     [supabaseProject, supabaseSession],
   );
+
+  useEffect(() => {
+    const webDocument = (globalThis as { document?: { title: string } }).document;
+    if (webDocument) {
+      webDocument.title = PRODUCT_NAME;
+    }
+  }, []);
+
   const selectLanguageFromSettings = async (language: LanguageCode) => {
     setSelectedLanguage(language);
     await saveLanguagePreference(language);
@@ -1569,6 +1577,9 @@ function HomeScreen({
   const compactColumns = 3;
   const launcherGap = isCompact ? 20 : 24;
   const tileWidth = isCompact ? Math.floor((contentWidth - launcherGap * (compactColumns - 1)) / compactColumns) : 116;
+  const installableGap = 12;
+  const installableColumns = contentWidth >= 760 ? 3 : contentWidth >= 560 ? 2 : 1;
+  const installableTileWidth = Math.floor((contentWidth - installableGap * (installableColumns - 1)) / installableColumns);
   const iconSize = isCompact ? 76 : 84;
   const launchingTemplate = catalog.find((template) => template.app.appId === launchingAppId) ?? null;
   const aiReady = Boolean(aiProviderConfig.apiKey.trim() && aiProviderConfig.model.trim());
@@ -1704,13 +1715,14 @@ function HomeScreen({
             <YStack gap="$4">
               <SectionHeading theme={theme} title={t('home.appsToInstall')} detail={installableTemplateSources.length > 0 ? `${installableTemplateSources.length} available` : 'Catalog clear'} />
               {installableTemplateSources.length > 0 ? (
-                <XStack gap="$3" rowGap="$3" flexWrap="wrap" alignItems="stretch">
+                <XStack gap={installableGap} rowGap={installableGap} flexWrap="wrap" alignItems="stretch">
                   {installableTemplateSources.map((source) => (
                     <InstallableTemplateTile
                       key={source.id}
                       source={source}
                       theme={theme}
                       t={t}
+                      width={installableTileWidth}
                       onInstall={() => onInstallTemplateSource(source)}
                     />
                   ))}
@@ -2749,25 +2761,27 @@ function InstallableTemplateTile({
   source,
   theme,
   t,
+  width,
   onInstall,
 }: {
   source: InstallableTemplateSource;
   theme: ReturnType<typeof resolveAppTheme>;
   t: Translator;
+  width: number;
   onInstall: () => void;
 }) {
   const icon = getInstallableTemplateIcon(source, theme.mode);
   const Icon = icon.component;
+  const description = getVisibleTemplateDescription(source.description);
   const visibleTags = getVisibleTemplateTags(source.tags);
 
   return (
     <YStack
-      width={260}
-      minHeight={168}
-      flexGrow={1}
-      maxWidth={360}
+      width={width}
+      height={196}
       padding="$4"
       gap="$3"
+      justifyContent="space-between"
       borderWidth={1}
       borderColor={theme.borderColor}
       borderRadius={24}
@@ -2793,9 +2807,9 @@ function InstallableTemplateTile({
           <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={16} fontWeight="900" numberOfLines={1}>
             {source.name}
           </Text>
-          {source.description ? (
+          {description ? (
             <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={18} numberOfLines={2}>
-              {source.description}
+              {description}
             </Paragraph>
           ) : null}
         </YStack>
@@ -3101,6 +3115,11 @@ function getInstallableTemplateIcon(source: InstallableTemplateSource, mode: 'li
 
 function getVisibleTemplateTags(tags: string[] | undefined) {
   return (tags ?? []).filter((tag) => tag.trim().toLowerCase() !== 'ministore');
+}
+
+function getVisibleTemplateDescription(description: string | undefined) {
+  const legacyProductNamePattern = new RegExp(`\\b${['App', 'Foundry'].join('')}\\b`, 'g');
+  return description?.replace(/\bMiniStore\b/g, PRODUCT_NAME).replace(legacyProductNamePattern, PRODUCT_NAME);
 }
 
 function inferIconKey(values: Array<string | undefined>) {
