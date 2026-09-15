@@ -125,10 +125,21 @@ export function isSQLiteAdapterAvailable() {
 }
 
 export async function deleteSQLiteAppData(appId: string, tables: TableDefinition[], databaseName?: string): Promise<void> {
-  const db = openDatabaseSync(databaseName ?? 'ministore.db');
+  let db: SQLiteDatabase;
+  try {
+    db = openDatabaseSync(databaseName ?? 'ministore.db');
+  } catch (error) {
+    console.warn(`Unable to open SQLite database while deleting app data for ${appId}.`, error);
+    return;
+  }
+
   tables.forEach((table) => {
     const physicalTable = getPhysicalTableName(appId, table.tableName);
-    db.execSync(`DROP TABLE IF EXISTS "${physicalTable}"`);
+    try {
+      db.execSync(`DROP TABLE IF EXISTS "${physicalTable}"`);
+    } catch (error) {
+      console.warn(`Unable to delete SQLite table ${physicalTable}.`, error);
+    }
   });
 }
 

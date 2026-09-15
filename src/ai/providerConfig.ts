@@ -53,8 +53,8 @@ export const aiProviderPresets: AiProviderPreset[] = [
     id: 'microsoft-foundry',
     label: 'Microsoft Foundry',
     kind: 'openai-compatible',
-    baseUrl: 'https://YOUR-RESOURCE.services.ai.azure.com/models',
-    model: 'gpt-4.1-mini',
+    baseUrl: 'https://YOUR-RESOURCE.openai.azure.com/openai/v1',
+    model: 'YOUR-DEPLOYMENT-NAME',
   },
   {
     id: 'custom',

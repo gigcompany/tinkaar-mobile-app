@@ -1,9 +1,9 @@
 import { Component, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Modal, Platform, Pressable, ScrollView, useColorScheme, useWindowDimensions } from 'react-native';
+import { Alert, Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Bot, BriefcaseBusiness, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Handshake, LayoutGrid, Monitor, Moon, Package, Plus, RefreshCcw, Settings, Sparkles, Sun, Trash2, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
+import { Bot, BriefcaseBusiness, CheckCircle2, CheckSquare, ChevronLeft, Cloud, DownloadCloud, Handshake, LayoutGrid, MessageCircle, Monitor, Moon, Package, Plus, RefreshCcw, Send, Settings, Sparkles, Sun, Trash2, Wand2, WalletCards, X as XIcon } from 'lucide-react-native';
 import { Button, Input, Paragraph, TamaguiProvider, Text, Theme, XStack, YStack } from 'tamagui';
 import tamaguiConfig from './tamagui.config';
 import {
@@ -15,7 +15,7 @@ import {
   validateAiProviderConfig,
 } from './src/ai/providerConfig';
 import { loadAiProviderConfig, saveAiProviderConfig } from './src/ai/providerConfigStore';
-import { APP_MUTATION_INSTRUCTIONS, APP_MUTATION_SYSTEM_PROMPT, generateAppMutation } from './src/ai/appMutator';
+import { AppBuildMode, AppMutationConversationMessage, AppMutationPlanResult, generateAppMutation, generateAppMutationPlan, generateNewAppDefinition } from './src/ai/appMutator';
 import { AppVersionRecord, loadAppVersions, saveAppVersionRecord } from './src/ai/appVersionStore';
 import { saveAppVersionToSupabase } from './src/ai/appVersionSupabase';
 import {
@@ -125,6 +125,12 @@ type AiBuildStatus =
   | { type: 'success'; message: string }
   | { type: 'error'; message: string };
 
+type AiChatMessage = AppMutationConversationMessage & {
+  id: string;
+};
+
+type AiBuilderMode = AppBuildMode;
+
 const defaultSupabaseTableName = 'ministore_records';
 
 export default function App() {
@@ -179,7 +185,10 @@ function AppContent() {
   const [aiProviderConfig, setAiProviderConfig] = useState<AiProviderConfig>(defaultAiProviderConfig);
   const [aiSettingsStatus, setAiSettingsStatus] = useState<AiBuildStatus>({ type: 'idle', message: '' });
   const [aiCustomizeOpen, setAiCustomizeOpen] = useState(false);
+  const [aiBuilderMode, setAiBuilderMode] = useState<AiBuilderMode>('customize');
   const [aiPrompt, setAiPrompt] = useState('');
+  const [aiChatMessages, setAiChatMessages] = useState<AiChatMessage[]>([]);
+  const [aiApprovedPlan, setAiApprovedPlan] = useState<string[] | null>(null);
   const [aiBuildStatus, setAiBuildStatus] = useState<AiBuildStatus>({ type: 'idle', message: '' });
   const [aiBuildBusy, setAiBuildBusy] = useState(false);
   const [appVersions, setAppVersions] = useState<AppVersionRecord[]>([]);
@@ -685,19 +694,35 @@ function AppContent() {
   };
 
   const openAiCustomize = () => {
+    setAiBuilderMode('customize');
     setAiPrompt('');
+    setAiChatMessages([
+      createAiChatMessage('assistant', 'Tell me what you want to change. If anything is unclear, I will ask first.'),
+    ]);
+    setAiApprovedPlan(null);
     setAiBuildStatus({ type: 'idle', message: '' });
     setAiCustomizeOpen(true);
   };
 
-  const customizeSelectedTemplate = async () => {
-    if (!selectedTemplate) {
+  const openAiCreate = () => {
+    setAiBuilderMode('create');
+    setAiPrompt('');
+    setAiChatMessages([
+      createAiChatMessage('assistant', 'Tell me the app you want. I will ask questions if needed, then show what I will build.'),
+    ]);
+    setAiApprovedPlan(null);
+    setAiBuildStatus({ type: 'idle', message: '' });
+    setAiCustomizeOpen(true);
+  };
+
+  const planSelectedTemplateCustomization = async () => {
+    if (aiBuilderMode === 'customize' && !selectedTemplate) {
       return;
     }
 
     const prompt = aiPrompt.trim();
     if (!prompt) {
-      setAiBuildStatus({ type: 'error', message: 'Describe the app change you want.' });
+      setAiBuildStatus({ type: 'error', message: aiBuilderMode === 'create' ? 'Describe the app you want to build.' : 'Describe the app change you want.' });
       return;
     }
 
@@ -707,19 +732,76 @@ function AppContent() {
       return;
     }
 
+    const userMessage = createAiChatMessage('user', prompt);
+    const nextMessages = [...aiChatMessages, userMessage];
+
+    setAiChatMessages(nextMessages);
+    setAiPrompt('');
+    setAiApprovedPlan(null);
     setAiBuildBusy(true);
-    setAiBuildStatus({ type: 'loading', message: 'Asking AI to update the app definition...' });
+    setAiBuildStatus({ type: 'loading', message: aiBuilderMode === 'create' ? 'Planning your app...' : 'Checking the change...' });
 
     try {
       await saveAiProviderConfig(aiProviderConfig);
-      const result = await generateAppMutation({
+      const result = await generateAppMutationPlan({
         provider: aiProviderConfig,
-        currentApp: selectedTemplate.app,
-        prompt,
+        currentApp: aiBuilderMode === 'customize' ? selectedTemplate?.app : undefined,
+        messages: nextMessages.map(({ role, content }) => ({ role, content })),
+        mode: aiBuilderMode,
+        existingAppIds: catalog.map((template) => template.app.appId),
       });
+      setAiChatMessages((current) => [...current, createAiChatMessage('assistant', formatAiPlanResponse(result))]);
+      setAiApprovedPlan(result.readyToBuild ? result.plan : null);
+      setAiBuildStatus({
+        type: 'idle',
+        message: result.readyToBuild ? '' : 'Answer these questions so I can build the right thing.',
+      });
+    } catch (error) {
+      setAiBuildStatus({ type: 'error', message: getFriendlyAiErrorMessage(error, 'plan') });
+    } finally {
+      setAiBuildBusy(false);
+    }
+  };
+
+  const customizeSelectedTemplate = async () => {
+    if (aiBuilderMode === 'customize' && !selectedTemplate) {
+      return;
+    }
+
+    if (!aiApprovedPlan?.length) {
+      setAiBuildStatus({ type: 'error', message: 'Please confirm the plan before I build.' });
+      return;
+    }
+
+    const validationError = validateAiProviderConfig(aiProviderConfig);
+    if (validationError) {
+      setAiBuildStatus({ type: 'error', message: validationError });
+      return;
+    }
+
+    const transcript = createAiConversationPrompt(aiChatMessages);
+
+    setAiBuildBusy(true);
+    setAiBuildStatus({ type: 'loading', message: aiBuilderMode === 'create' ? 'Creating your app...' : 'Saving the app change...' });
+
+    try {
+      await saveAiProviderConfig(aiProviderConfig);
+      const result = aiBuilderMode === 'create'
+        ? await generateNewAppDefinition({
+            provider: aiProviderConfig,
+            prompt: transcript,
+            approvedPlan: aiApprovedPlan,
+            existingAppIds: catalog.map((template) => template.app.appId),
+          })
+        : await generateAppMutation({
+            provider: aiProviderConfig,
+            currentApp: selectedTemplate!.app,
+            prompt: transcript,
+            approvedPlan: aiApprovedPlan,
+          });
       const versionRecord = createAppVersionRecord({
         app: result.app,
-        prompt,
+        prompt: `${transcript}\n\nApproved plan:\n${aiApprovedPlan.map((item) => `- ${item}`).join('\n')}`,
         providerName: aiProviderConfig.displayName || aiProviderConfig.presetId,
       });
       await saveAppVersionRecord(versionRecord);
@@ -734,13 +816,20 @@ function AppContent() {
         supabaseSaved = true;
       }
 
-      const installedTemplate = toInstalledTemplateRecord(
-        {
-          ...selectedTemplate,
+      const nextTemplateBundle: TemplateBundle = aiBuilderMode === 'create'
+        ? {
+            app: result.app,
+            seedData: {},
+            source: 'installed',
+          }
+        : {
+          ...selectedTemplate!,
           app: result.app,
-          seedData: selectedTemplate.seedData,
+          seedData: selectedTemplate!.seedData,
           source: 'installed',
-        },
+        };
+      const installedTemplate = toInstalledTemplateRecord(
+        nextTemplateBundle,
         `ai://${result.app.appId}/${versionRecord.id}`,
       );
       installedTemplate.installedAt = versionRecord.createdAt;
@@ -750,14 +839,20 @@ function AppContent() {
         installedTemplate,
       ]);
       setAppVersions((current) => [versionRecord, ...current.filter((version) => version.id !== versionRecord.id)]);
+      setAiApprovedPlan(null);
+      setAiChatMessages((current) => [...current, createAiChatMessage('assistant', `${aiBuilderMode === 'create' ? 'Done. Your app is ready.' : 'Done. I saved the change.'} ${result.summary}`)]);
+      if (aiBuilderMode === 'create') {
+        setAiCustomizeOpen(false);
+        setSelectedAppId(result.app.appId);
+      }
       setAiBuildStatus({
         type: 'success',
         message: supabaseSaved
-          ? `Saved ${result.app.name} ${result.app.version} locally and in Supabase. ${result.summary}`
-          : `Saved ${result.app.name} ${result.app.version} locally. Enable Cloud Sync in Settings to store future versions in Supabase. ${result.summary}`,
+          ? `${aiBuilderMode === 'create' ? 'Created' : 'Saved'} ${result.app.name}.`
+          : `${aiBuilderMode === 'create' ? 'Created' : 'Saved'} ${result.app.name} on this device.`,
       });
     } catch (error) {
-      setAiBuildStatus({ type: 'error', message: getErrorMessage(error) });
+      setAiBuildStatus({ type: 'error', message: getFriendlyAiErrorMessage(error, 'build') });
     } finally {
       setAiBuildBusy(false);
     }
@@ -848,6 +943,7 @@ function AppContent() {
             onSelectAiProviderPreset={selectAiProviderPreset}
             onChangeAiProviderConfig={updateAiProviderConfig}
             onSaveAiProviderConfig={persistAiProviderConfig}
+            onCreateApp={openAiCreate}
             onLaunch={(appId) => {
               setLaunchingAppId(appId);
               launchProgress.setValue(0);
@@ -862,6 +958,28 @@ function AppContent() {
                 launchProgress.setValue(0);
               });
             }}
+          />
+          <AiCustomizeModal
+            visible={aiCustomizeOpen && aiBuilderMode === 'create'}
+            mode={aiBuilderMode}
+            theme={homeTheme}
+            template={null}
+            prompt={aiPrompt}
+            messages={aiChatMessages}
+            approvedPlan={aiApprovedPlan}
+            status={aiBuildStatus}
+            busy={aiBuildBusy}
+            versionCount={0}
+            supabaseReady={Boolean(supabaseProject && supabaseSession)}
+            onChangePrompt={(value) => {
+              setAiPrompt(value);
+              if (value.trim()) {
+                setAiApprovedPlan(null);
+              }
+            }}
+            onClose={() => setAiCustomizeOpen(false)}
+            onSubmit={planSelectedTemplateCustomization}
+            onConfirmPlan={customizeSelectedTemplate}
           />
           <StatusBar style={homeTheme.mode === 'dark' ? 'light' : 'dark'} />
         </Theme>
@@ -890,17 +1008,26 @@ function AppContent() {
           />
         </RuntimeErrorBoundary>
         <AiCustomizeModal
-          visible={aiCustomizeOpen}
+          visible={aiCustomizeOpen && aiBuilderMode === 'customize'}
+          mode={aiBuilderMode}
           theme={runtimeTheme}
           template={selectedTemplate}
           prompt={aiPrompt}
+          messages={aiChatMessages}
+          approvedPlan={aiApprovedPlan}
           status={aiBuildStatus}
           busy={aiBuildBusy}
           versionCount={appVersions.filter((version) => version.appId === selectedTemplate.app.appId).length}
           supabaseReady={Boolean(supabaseProject && supabaseSession)}
-          onChangePrompt={setAiPrompt}
+          onChangePrompt={(value) => {
+            setAiPrompt(value);
+            if (value.trim()) {
+              setAiApprovedPlan(null);
+            }
+          }}
           onClose={() => setAiCustomizeOpen(false)}
-          onSubmit={customizeSelectedTemplate}
+          onSubmit={planSelectedTemplateCustomization}
+          onConfirmPlan={customizeSelectedTemplate}
         />
         <StatusBar style={runtimeTheme.mode === 'dark' ? 'light' : 'dark'} />
       </Theme>
@@ -1308,6 +1435,11 @@ function RuntimeShell({
       <Modal visible={runtime.modalPage !== null} animationType="slide" presentationStyle="pageSheet">
         <Theme name={runtime.theme.mode}>
           <SafeAreaView style={{ flex: 1, backgroundColor: modalSurfaceColor }}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+              style={{ flex: 1 }}
+            >
             <YStack flex={1} backgroundColor={modalSurfaceColor}>
               <XStack alignItems="center" justifyContent="space-between" paddingHorizontal="$4" paddingTop="$2" paddingBottom="$3">
                 <YStack width={44} />
@@ -1328,6 +1460,7 @@ function RuntimeShell({
                 {runtime.modalPage ? <RendererNode node={runtime.modalPage.layout} /> : null}
               </ScrollView>
             </YStack>
+            </KeyboardAvoidingView>
           </SafeAreaView>
         </Theme>
       </Modal>
@@ -1522,6 +1655,7 @@ function HomeScreen({
   onSelectAiProviderPreset,
   onChangeAiProviderConfig,
   onSaveAiProviderConfig,
+  onCreateApp,
   onLaunch,
 }: {
   catalog: TemplateBundle[];
@@ -1567,6 +1701,7 @@ function HomeScreen({
   onSelectAiProviderPreset: (presetId: AiProviderPresetId) => void;
   onChangeAiProviderConfig: (patch: Partial<AiProviderConfig>) => void;
   onSaveAiProviderConfig: () => void;
+  onCreateApp: () => void;
   onLaunch: (appId: string) => void;
 }) {
   const { width } = useWindowDimensions();
@@ -1659,6 +1794,7 @@ function HomeScreen({
               installableCount={installableTemplateSources.length}
               cloudConnected={Boolean(supabaseSession)}
               aiReady={aiReady}
+              onCreateApp={onCreateApp}
             />
 
             <YStack gap="$4">
@@ -1704,7 +1840,7 @@ function HomeScreen({
                         No apps installed
                       </Text>
                       <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
-                        Install an app from the catalog below to start again.
+                        Build one with AI or install an app from the catalog below.
                       </Paragraph>
                     </YStack>
                   </XStack>
@@ -1809,12 +1945,14 @@ function HomeHeroCard({
   installableCount,
   cloudConnected,
   aiReady,
+  onCreateApp,
 }: {
   theme: ReturnType<typeof resolveAppTheme>;
   installedCount: number;
   installableCount: number;
   cloudConnected: boolean;
   aiReady: boolean;
+  onCreateApp: () => void;
 }) {
   return (
     <YStack
@@ -1839,7 +1977,7 @@ function HomeHeroCard({
             Launch apps, then shape them your way.
           </Text>
           <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={21}>
-            Install what you need, run it locally, and customize when the workflow changes.
+            Build from scratch, install what you need, and customize when the workflow changes.
           </Paragraph>
         </YStack>
         <YStack width={64} height={64} borderRadius={22} alignItems="center" justifyContent="center" backgroundColor={theme.primaryColor} flexShrink={0}>
@@ -1852,6 +1990,26 @@ function HomeHeroCard({
         <HomeStateChip theme={theme} active={cloudConnected} activeLabel="Cloud sync on" inactiveLabel="Cloud setup" icon={Cloud} />
         <HomeStateChip theme={theme} active={aiReady} activeLabel="AI ready" inactiveLabel="Add AI key" icon={Bot} />
       </XStack>
+      <Button
+        size="$4"
+        alignSelf="flex-start"
+        minHeight={48}
+        height="auto"
+        paddingVertical="$3"
+        backgroundColor={theme.primaryColor}
+        borderRadius={999}
+        color={theme.primaryContrastColor}
+        fontFamily={theme.fontFamilyValue}
+        fontWeight="900"
+        onPress={onCreateApp}
+      >
+        <XStack alignItems="center" gap="$2">
+          <Wand2 color={theme.primaryContrastColor} size={18} strokeWidth={2.2} />
+          <Text color={theme.primaryContrastColor} fontFamily={theme.fontFamilyValue} fontSize={14} fontWeight="900">
+            Build with AI
+          </Text>
+        </XStack>
+      </Button>
     </YStack>
   );
 }
@@ -2014,6 +2172,11 @@ function LauncherSettingsModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <Theme name={theme.mode}>
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.backgroundColor }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+            style={{ flex: 1 }}
+          >
           <YStack flex={1} backgroundColor={theme.backgroundColor}>
             <XStack alignItems="center" justifyContent="space-between" paddingHorizontal="$4" paddingTop="$2" paddingBottom="$3">
               <YStack width={44} />
@@ -2181,6 +2344,7 @@ function LauncherSettingsModal({
               </YStack>
             </ScrollView>
           </YStack>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Theme>
     </Modal>
@@ -2464,7 +2628,7 @@ function AiProviderSettingsSection({
           value={config.baseUrl}
           autoCapitalize="none"
           autoCorrect={false}
-          placeholder="https://provider.example.com/v1"
+          placeholder={config.presetId === 'microsoft-foundry' ? 'https://YOUR-RESOURCE.openai.azure.com/openai/v1' : 'https://provider.example.com/v1'}
           placeholderTextColor={theme.mutedTextColor as never}
           backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
           borderWidth={1}
@@ -2477,6 +2641,11 @@ function AiProviderSettingsSection({
           paddingVertical="$2.5"
           onChangeText={(baseUrl) => onChangeConfig({ baseUrl, presetId: config.presetId === 'custom' ? 'custom' : config.presetId })}
         />
+        {config.presetId === 'microsoft-foundry' ? (
+          <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={17}>
+            Use the Azure OpenAI v1 base URL, ending in /openai/v1. The app adds /chat/completions automatically; model should be your deployment name.
+          </Paragraph>
+        ) : null}
         <Input
           minHeight={48}
           height="auto"
@@ -2561,9 +2730,12 @@ function AiProviderSettingsSection({
 
 function AiCustomizeModal({
   visible,
+  mode,
   theme,
   template,
   prompt,
+  messages,
+  approvedPlan,
   status,
   busy,
   versionCount,
@@ -2571,11 +2743,15 @@ function AiCustomizeModal({
   onChangePrompt,
   onClose,
   onSubmit,
+  onConfirmPlan,
 }: {
   visible: boolean;
+  mode: AiBuilderMode;
   theme: ReturnType<typeof resolveAppTheme>;
-  template: TemplateBundle;
+  template: TemplateBundle | null;
   prompt: string;
+  messages: AiChatMessage[];
+  approvedPlan: string[] | null;
   status: AiBuildStatus;
   busy: boolean;
   versionCount: number;
@@ -2583,18 +2759,33 @@ function AiCustomizeModal({
   onChangePrompt: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
+  onConfirmPlan: () => void;
 }) {
   const statusColor = status.type === 'error' ? theme.dangerColor : status.type === 'success' ? theme.successColor : theme.mutedTextColor;
+  const canConfirmPlan = Boolean(approvedPlan?.length) && !busy && !prompt.trim();
+  const isCreateMode = mode === 'create';
+  const targetName = template?.app.name ?? 'a new app';
+  const promptLabel = `Tell ${PRODUCT_NAME} what to build`;
+  const placeholder = approvedPlan?.length
+    ? 'Add a note to revise the plan, or build below.'
+    : isCreateMode
+      ? 'Example: Build a job tracker for applications, interviews, contacts, follow-ups, and offer status.'
+      : 'Example: Add GST number and lead source to CRM deals, make close date required, and show lead source in the deals list.';
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <Theme name={theme.mode}>
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.backgroundColor }}>
-          <YStack flex={1} backgroundColor={theme.backgroundColor}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+            style={{ flex: 1 }}
+          >
+          <YStack flex={1} backgroundColor={theme.backgroundColor} position="relative">
             <XStack alignItems="center" justifyContent="space-between" paddingHorizontal="$4" paddingTop="$2" paddingBottom="$3">
               <YStack width={44} />
               <Text flex={1} textAlign="center" color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={17} fontWeight="900">
-                Customize App
+                {isCreateMode ? 'Build App' : 'Customize App'}
               </Text>
               <IconButton accessibilityLabel="Close AI customizer" theme={theme} onPress={onClose}>
                 <XIcon color={theme.primaryColor} size={21} strokeWidth={2.2} />
@@ -2605,7 +2796,7 @@ function AiCustomizeModal({
               contentContainerStyle={{
                 paddingHorizontal: 18,
                 paddingTop: 12,
-                paddingBottom: 32,
+                paddingBottom: approvedPlan?.length ? 270 : 246,
                 alignItems: 'center',
               }}
             >
@@ -2614,47 +2805,41 @@ function AiCustomizeModal({
                   <XStack alignItems="center" gap="$2">
                     <Wand2 color={theme.primaryColor} size={20} strokeWidth={2.2} />
                     <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={22} lineHeight={28} fontWeight="900">
-                      Vibe code {template.app.name}
+                      {isCreateMode ? 'Build from scratch' : `Vibe code ${targetName}`}
                     </Text>
                   </XStack>
                   <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={14} lineHeight={20}>
-                    Describe a tweak to fields, forms, dashboard widgets, validations, or workflow logic. Tinkaar will validate the generated app before saving a new version.
+                    {isCreateMode
+                      ? 'Describe the app, data you need to track, and the workflows it should support. Tinkaar will validate the generated app before installing it.'
+                      : 'Describe a tweak to fields, forms, dashboard widgets, validations, or workflow logic. Tinkaar will validate the generated app before saving a new version.'}
                   </Paragraph>
                 </YStack>
-                <YStack gap="$2">
-                  <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={13} fontWeight="800">
-                    Change request
-                  </Text>
-                  <Input
-                    minHeight={150}
-                    height="auto"
-                    value={prompt}
-                    multiline
-                    autoCorrect
-                    placeholder="Example: Add GST number and lead source to CRM deals, make close date required, and show lead source in the deals list."
-                    placeholderTextColor={theme.mutedTextColor as never}
-                    backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
-                    borderWidth={1}
-                    borderColor={theme.borderColor}
-                    borderRadius={16}
-                    color={theme.textColor}
-                    fontFamily={theme.fontFamilyValue}
-                    fontSize={15}
-                    lineHeight={22}
-                    paddingVertical="$3"
-                    onChangeText={onChangePrompt}
-                  />
-                </YStack>
-                <YStack padding="$4" gap="$2" borderRadius={18} borderWidth={1} borderColor={theme.borderColor} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}>
-                  <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={14} fontWeight="900">
-                    Versioning
-                  </Text>
-                  <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
-                    {versionCount} saved versions for this app. New versions replace the installed app locally and {supabaseReady ? 'will be stored in your Supabase account.' : 'can sync to Supabase after Cloud Sync is enabled in Settings.'}
-                  </Paragraph>
+                <YStack gap="$3">
+                  {messages.map((message) => (
+                    <YStack
+                      key={message.id}
+                      alignSelf={message.role === 'user' ? 'flex-end' : 'flex-start'}
+                      maxWidth="92%"
+                      padding="$3"
+                      gap="$1.5"
+                      borderRadius={16}
+                      borderWidth={1}
+                      borderColor={message.role === 'user' ? theme.primarySoftColor : theme.borderColor}
+                      backgroundColor={message.role === 'user' ? theme.primarySoftColor : theme.mode === 'dark' ? '#172033' : '#ffffff'}
+                    >
+                      <XStack alignItems="center" gap="$1.5">
+                        {message.role === 'assistant' ? <MessageCircle color={theme.primaryColor} size={15} strokeWidth={2.2} /> : null}
+                    <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={11} lineHeight={14} fontWeight="800">
+                          {message.role === 'user' ? 'You' : PRODUCT_NAME}
+                        </Text>
+                      </XStack>
+                      <Paragraph color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
+                        {message.content}
+                      </Paragraph>
+                    </YStack>
+                  ))}
                 </YStack>
                 {busy ? <GenerationProgressCard theme={theme} /> : null}
-                <AgentPromptCard theme={theme} />
                 {status.message ? (
                   <YStack padding="$4" borderRadius={18} borderWidth={1} borderColor={theme.borderColor} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}>
                     <Paragraph color={statusColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={19}>
@@ -2662,41 +2847,107 @@ function AiCustomizeModal({
                     </Paragraph>
                   </YStack>
                 ) : null}
-                <XStack justifyContent="flex-end" gap="$2" rowGap="$2" flexWrap="wrap">
-                  <Button
-                    size="$4"
-                    minHeight={50}
-                    height="auto"
-                    paddingVertical="$3"
-                    disabled={busy}
-                    backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
-                    borderWidth={1}
-                    borderColor={theme.borderColor}
-                    borderRadius={999}
-                    color={theme.textColor}
-                    fontFamily={theme.fontFamilyValue}
-                    onPress={onClose}
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    size="$4"
-                    minHeight={50}
-                    height="auto"
-                    paddingVertical="$3"
-                    disabled={busy}
-                    backgroundColor={theme.primaryColor}
-                    borderRadius={999}
-                    color={theme.primaryContrastColor}
-                    fontFamily={theme.fontFamilyValue}
-                    onPress={onSubmit}
-                  >
-                    {busy ? 'Building...' : 'Generate Version'}
-                  </Button>
-                </XStack>
               </YStack>
             </ScrollView>
+            <YStack
+              position="absolute"
+              left={0}
+              right={0}
+              bottom={0}
+              paddingHorizontal="$4"
+              paddingTop="$3"
+              paddingBottom="$4"
+              borderTopWidth={1}
+              borderTopColor={theme.mode === 'dark' ? '#263244' : '#e2e8f0'}
+              backgroundColor={theme.backgroundColor}
+              shadowColor={theme.mode === 'dark' ? '#000000' : '#64748b'}
+              shadowOpacity={theme.mode === 'dark' ? 0.28 : 0.12}
+              shadowRadius={22}
+              shadowOffset={{ width: 0, height: -8 }}
+            >
+              <YStack width="100%" maxWidth={720} alignSelf="center" gap="$2">
+                <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={13} fontWeight="800">
+                  {promptLabel}
+                </Text>
+                <YStack
+                  minHeight={approvedPlan?.length ? 166 : 150}
+                  padding="$3"
+                  gap="$2"
+                  borderWidth={2}
+                  borderColor={theme.primaryColor}
+                  borderRadius={18}
+                  backgroundColor={theme.mode === 'dark' ? '#101827' : '#f8fbff'}
+                >
+                  <TextInput
+                    value={prompt}
+                    multiline
+                    autoCorrect
+                    textAlignVertical="top"
+                    placeholder={placeholder}
+                    placeholderTextColor={theme.mutedTextColor}
+                    onChangeText={onChangePrompt}
+                    style={{
+                      minHeight: approvedPlan?.length ? 90 : 76,
+                      flexGrow: 1,
+                      color: theme.textColor,
+                      fontFamily: theme.fontFamilyValue,
+                      fontSize: 15,
+                      lineHeight: 22,
+                      paddingHorizontal: 0,
+                      paddingTop: 0,
+                      paddingBottom: 0,
+                      textAlignVertical: 'top',
+                    }}
+                  />
+                  <XStack justifyContent="flex-end" alignItems="center" gap="$2" rowGap="$2" flexWrap="wrap">
+                    <Button
+                      size="$3"
+                      minHeight={44}
+                      height="auto"
+                      paddingHorizontal="$4"
+                      paddingVertical="$2"
+                      disabled={busy || !prompt.trim()}
+                      backgroundColor={busy || !prompt.trim() ? theme.primarySoftColor : theme.primaryColor}
+                      borderRadius={999}
+                      color={busy || !prompt.trim() ? theme.mutedTextColor : theme.primaryContrastColor}
+                      fontFamily={theme.fontFamilyValue}
+                      onPress={onSubmit}
+                    >
+                      <XStack alignItems="center" gap="$2">
+                        <Send color={busy || !prompt.trim() ? theme.mutedTextColor : theme.primaryContrastColor} size={16} strokeWidth={2.2} />
+                        <Text color={busy || !prompt.trim() ? theme.mutedTextColor : theme.primaryContrastColor} fontFamily={theme.fontFamilyValue} fontWeight="800">
+                          {approvedPlan?.length ? 'Update' : 'Send'}
+                        </Text>
+                      </XStack>
+                    </Button>
+                    {approvedPlan?.length ? (
+                      <Button
+                        size="$3"
+                        minHeight={44}
+                        height="auto"
+                        paddingHorizontal="$4"
+                        paddingVertical="$2"
+                        disabled={!canConfirmPlan}
+                        backgroundColor={canConfirmPlan ? theme.successColor : theme.primarySoftColor}
+                        borderRadius={999}
+                        color={canConfirmPlan ? theme.primaryContrastColor : theme.mutedTextColor}
+                        fontFamily={theme.fontFamilyValue}
+                        onPress={onConfirmPlan}
+                      >
+                        <XStack alignItems="center" gap="$2">
+                          <CheckCircle2 color={canConfirmPlan ? theme.primaryContrastColor : theme.mutedTextColor} size={16} strokeWidth={2.2} />
+                          <Text color={canConfirmPlan ? theme.primaryContrastColor : theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontWeight="800">
+                            {isCreateMode ? 'Create' : 'Build'}
+                          </Text>
+                        </XStack>
+                      </Button>
+                    ) : null}
+                  </XStack>
+                </YStack>
+              </YStack>
+            </YStack>
           </YStack>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Theme>
     </Modal>
@@ -2864,41 +3115,6 @@ function GenerationProgressCard({ theme }: { theme: ReturnType<typeof resolveApp
   );
 }
 
-function AgentPromptCard({ theme }: { theme: ReturnType<typeof resolveAppTheme> }) {
-  const instructionText = APP_MUTATION_INSTRUCTIONS.join('\n');
-
-  return (
-    <YStack padding="$4" gap="$3" borderRadius={18} borderWidth={1} borderColor={theme.borderColor} backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}>
-      <XStack alignItems="center" gap="$2">
-        <Bot color={theme.primaryColor} size={18} strokeWidth={2.2} />
-        <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={14} fontWeight="900">
-          Code generation agent prompt
-        </Text>
-      </XStack>
-      <YStack gap="$2">
-        <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="800">
-          System
-        </Text>
-        <YStack padding="$3" borderRadius={14} backgroundColor={theme.mode === 'dark' ? '#0b1120' : '#f8fafc'} borderWidth={1} borderColor={theme.borderColor}>
-          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={18}>
-            {APP_MUTATION_SYSTEM_PROMPT}
-          </Text>
-        </YStack>
-      </YStack>
-      <YStack gap="$2">
-        <Text color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={16} fontWeight="800">
-          App definition rules
-        </Text>
-        <YStack padding="$3" borderRadius={14} backgroundColor={theme.mode === 'dark' ? '#0b1120' : '#f8fafc'} borderWidth={1} borderColor={theme.borderColor}>
-          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={12} lineHeight={18}>
-            {instructionText}
-          </Text>
-        </YStack>
-      </YStack>
-    </YStack>
-  );
-}
-
 function LaunchOverlay({
   template,
   theme,
@@ -2976,24 +3192,23 @@ function InstallableTemplateTile({
   return (
     <YStack
       width={width}
-      height={196}
-      padding="$4"
-      gap="$3"
-      justifyContent="space-between"
+      minHeight={108}
+      padding="$3"
+      gap="$2.5"
       borderWidth={1}
       borderColor={theme.borderColor}
-      borderRadius={24}
+      borderRadius={18}
       backgroundColor={theme.mode === 'dark' ? '#172033' : '#ffffff'}
       shadowColor={theme.mode === 'dark' ? '#000000' : '#64748b'}
-      shadowOpacity={theme.mode === 'dark' ? 0.22 : 0.08}
-      shadowRadius={18}
-      shadowOffset={{ width: 0, height: 10 }}
+      shadowOpacity={theme.mode === 'dark' ? 0.16 : 0.05}
+      shadowRadius={12}
+      shadowOffset={{ width: 0, height: 6 }}
     >
-      <XStack alignItems="flex-start" gap="$3">
+      <XStack alignItems="center" gap="$3">
         <YStack
-          width={52}
-          height={52}
-          borderRadius={18}
+          width={56}
+          height={56}
+          borderRadius={14}
           alignItems="center"
           justifyContent="center"
           backgroundColor={icon.backgroundColor}
@@ -3002,42 +3217,43 @@ function InstallableTemplateTile({
           <Icon color={icon.color} size={24} strokeWidth={2} />
         </YStack>
         <YStack flex={1} minWidth={0} gap="$1">
-          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={16} fontWeight="900" numberOfLines={1}>
+          <Text color={theme.textColor} fontFamily={theme.fontFamilyValue} fontSize={16} lineHeight={20} fontWeight="900" numberOfLines={1}>
             {source.name}
           </Text>
           {description ? (
-            <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={18} numberOfLines={2}>
+            <Paragraph color={theme.mutedTextColor} fontFamily={theme.fontFamilyValue} fontSize={13} lineHeight={17} numberOfLines={2}>
               {description}
             </Paragraph>
           ) : null}
+          {visibleTags.length > 0 ? (
+            <XStack gap="$1.5" rowGap="$1.5" flexWrap="wrap" marginTop="$1">
+              {visibleTags.slice(0, 2).map((tag) => (
+                <YStack key={tag} paddingHorizontal="$2" paddingVertical="$0.5" borderRadius={999} backgroundColor={theme.primarySoftColor}>
+                  <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={10} lineHeight={14} fontWeight="800">
+                    {tag}
+                  </Text>
+                </YStack>
+              ))}
+            </XStack>
+          ) : null}
         </YStack>
+        <Button
+          size="$2"
+          minHeight={34}
+          height={34}
+          minWidth={66}
+          paddingHorizontal="$3"
+          paddingVertical="$1"
+          backgroundColor={theme.mode === 'dark' ? '#23304a' : theme.primarySoftColor}
+          borderRadius={999}
+          color={theme.primaryColor}
+          fontFamily={theme.fontFamilyValue}
+          fontWeight="900"
+          onPress={onInstall}
+        >
+          GET
+        </Button>
       </XStack>
-      {visibleTags.length > 0 ? (
-        <XStack gap="$1.5" rowGap="$1.5" flexWrap="wrap">
-          {visibleTags.slice(0, 3).map((tag) => (
-            <YStack key={tag} paddingHorizontal="$2.5" paddingVertical="$1" borderRadius={999} backgroundColor={theme.primarySoftColor}>
-              <Text color={theme.primaryColor} fontFamily={theme.fontFamilyValue} fontSize={11} fontWeight="800">
-                {tag}
-              </Text>
-            </YStack>
-          ))}
-        </XStack>
-      ) : null}
-      <Button
-        size="$3"
-        minHeight={46}
-        height="auto"
-        paddingVertical="$2.5"
-        width="100%"
-        backgroundColor={theme.primaryColor}
-        borderRadius={999}
-        color={theme.primaryContrastColor}
-        fontFamily={theme.fontFamilyValue}
-        fontWeight="900"
-        onPress={onInstall}
-      >
-        {t('common.install')}
-      </Button>
     </YStack>
   );
 }
@@ -3575,6 +3791,56 @@ function createAppVersionRecord({
     createdAt,
     app,
   };
+}
+
+function createAiChatMessage(role: AiChatMessage['role'], content: string): AiChatMessage {
+  return {
+    id: `${role}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    content,
+  };
+}
+
+function createAiConversationPrompt(messages: AiChatMessage[]) {
+  return messages
+    .map((message) => `${message.role === 'user' ? 'User' : 'AI'}: ${message.content}`)
+    .join('\n\n');
+}
+
+function formatAiPlanResponse(result: AppMutationPlanResult) {
+  const intro = result.readyToBuild
+    ? 'Here is what I will build.'
+    : result.message.trim();
+  const sections = [intro];
+
+  if (result.questions.length) {
+    sections.push(`Questions:\n${result.questions.map((question, index) => `${index + 1}. ${question}`).join('\n')}`);
+  }
+
+  if (result.plan.length) {
+    sections.push(`I will:\n${result.plan.map((item, index) => `${index + 1}. ${item}`).join('\n')}`);
+  }
+
+  return sections.filter(Boolean).join('\n\n');
+}
+
+function getFriendlyAiErrorMessage(error: unknown, step: 'plan' | 'build') {
+  const message = getErrorMessage(error);
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('api key') || lowerMessage.includes('unauthorized') || lowerMessage.includes('401')) {
+    return 'I could not connect to the AI service. Please check the AI settings and try again.';
+  }
+
+  if (lowerMessage.includes('network') || lowerMessage.includes('failed') || lowerMessage.includes('timeout')) {
+    return 'The AI service did not respond. Please try again in a moment.';
+  }
+
+  if (step === 'plan') {
+    return 'I could not make a clear plan from that. Please say what records, fields, and screens you need.';
+  }
+
+  return 'I could not safely build that app yet. Please try again with the main records, fields, and actions you want.';
 }
 
 function getErrorMessage(error: unknown) {

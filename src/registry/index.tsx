@@ -433,6 +433,7 @@ function InputPrimitive({ node, value }: ComponentRenderProps) {
   const runtime = useRuntime();
   const currentValue = asText(value ?? runtime.draft[node.bind ?? '']);
   const field = getBoundField(runtime.app, node.bind);
+  const multiline = Boolean(node.multiline || field?.type === 'textarea');
 
   return (
     <YStack gap="$2">
@@ -443,10 +444,10 @@ function InputPrimitive({ node, value }: ComponentRenderProps) {
       <Input
         {...getNativeInputProps(field?.type)}
         value={currentValue}
-        multiline={node.multiline}
-        minHeight={node.multiline ? 116 : 50}
-        height="auto"
-        textAlignVertical={node.multiline ? 'top' : 'center'}
+        multiline={multiline}
+        minHeight={multiline ? 116 : 50}
+        height={multiline ? 116 : 50}
+        textAlignVertical={multiline ? 'top' : 'center'}
         backgroundColor={getInsetSurfaceColor(runtime.theme.mode)}
         borderWidth={1}
         borderColor={runtime.theme.mode === 'dark' ? '#1f2937' : '#e2e8f0'}
@@ -456,7 +457,8 @@ function InputPrimitive({ node, value }: ComponentRenderProps) {
         fontSize={getScaledFontSize(runtime.theme, 15)}
         lineHeight={getScaledFontSize(runtime.theme, 21)}
         paddingHorizontal="$3.5"
-        paddingVertical={node.multiline ? '$3' : '$2.5'}
+        paddingTop={multiline ? '$3' : '$2.5'}
+        paddingBottom={multiline ? '$3' : '$2.5'}
         onChangeText={(next) => {
           if (node.bind) {
             runtime.setDraftValue(node.bind, next);
